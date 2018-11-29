@@ -1,0 +1,41 @@
+use std::fs::File;
+use std::io::Read;
+
+const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
+
+pub trait ULogHeader {
+    fn is_ulog(&mut self) -> bool;
+}
+
+impl ULogHeader for File {
+    /// Validates that the file is a ulog file with a valid header
+    ///
+    /// # Examples
+    /// ```
+    /// use px4_ulog::parser::header::*;
+    ///
+    /// let filename = format!("{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg", env!("CARGO_MANIFEST_DIR"));
+    /// let mut log_file = std::fs::File::open(&filename).unwrap();
+    /// assert!(log_file.is_ulog());
+    /// ```
+    fn is_ulog(&mut self) -> bool {
+        let mut buffer = [0; 7];
+        if let Ok(bytes) = self.read(&mut buffer) {
+            bytes == 7 && buffer == HEADER_BYTES
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_does_not_validate_incorrect_file() {
+        let filename = format!("{}/tests/fixtures/not_a_log_file.txt", env!("CARGO_MANIFEST_DIR"));
+        let mut log_file = std::fs::File::open(&filename).unwrap();
+        assert!(!log_file.is_ulog());
+    }
+}
