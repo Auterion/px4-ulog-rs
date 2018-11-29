@@ -8,6 +8,7 @@ const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
 
 pub trait ULogHeader {
     fn is_ulog(&mut self) -> bool;
+    fn has_valid_ulog_header(&mut self) -> Result<bool>;
     fn read_ulog_version(&mut self) -> Result<u8>;
     fn read_start_timestamp(&mut self) -> Result<u64>;
 }
@@ -24,13 +25,29 @@ impl ULogHeader for File {
     /// assert!(log_file.is_ulog());
     /// ```
     fn is_ulog(&mut self) -> bool {
-        self.seek(SeekFrom::Start(0))
-            .expect("File must be seekable");
+        self.has_valid_ulog_header().unwrap_or(false) && self
+            .read_ulog_version()
+            .and_then(|_| self.read_start_timestamp())
+            .is_ok()
+    }
+
+    /// Validates that the file has a valid header
+    ///
+    /// # Examples
+    /// ```
+    /// use px4_ulog::parser::header::*;
+    ///
+    /// let filename = format!("{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg", env!("CARGO_MANIFEST_DIR"));
+    /// let mut log_file = std::fs::File::open(&filename).unwrap();
+    /// assert!(log_file.has_valid_ulog_header().unwrap());
+    /// ```
+    fn has_valid_ulog_header(&mut self) -> Result<bool> {
+        self.seek(SeekFrom::Start(0))?;
         let mut buffer = [0; 7];
         if let Ok(bytes) = self.read(&mut buffer) {
-            bytes == 7 && buffer == HEADER_BYTES
+            Ok(bytes == 7 && buffer == HEADER_BYTES)
         } else {
-            false
+            Ok(false)
         }
     }
 
