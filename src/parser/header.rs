@@ -2,11 +2,14 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{Result, SeekFrom};
 
+use unpack;
+
 const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
 
 pub trait ULogHeader {
     fn is_ulog(&mut self) -> bool;
     fn read_ulog_version(&mut self) -> Result<u8>;
+    fn read_start_timestamp(&mut self) -> Result<u64>;
 }
 
 impl ULogHeader for File {
@@ -46,6 +49,25 @@ impl ULogHeader for File {
         let mut buffer = [0; 1];
         self.read_exact(&mut buffer)?;
         Ok(buffer[0])
+    }
+
+    /// Extracts the logging start time
+    ///
+    /// # Examples
+    /// ```
+    /// use px4_ulog::parser::header::*;
+    ///
+    /// let filename = format!("{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg", env!("CARGO_MANIFEST_DIR"));
+    /// let mut log_file = std::fs::File::open(&filename).unwrap();
+    /// assert_eq!(log_file.read_start_timestamp().unwrap(), 373058900);
+    /// ```
+    fn read_start_timestamp(&mut self) -> Result<u64> {
+        self.seek(SeekFrom::Start(8))?;
+        let mut buffer = [0; 8];
+        self.read_exact(&mut buffer)?;
+
+        let timestamp = unpack::as_u64_le(&buffer);
+        Ok(timestamp)
     }
 }
 
