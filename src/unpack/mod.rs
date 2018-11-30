@@ -1,6 +1,7 @@
+use std::io::{Error, ErrorKind, Result};
 use std::iter::*;
 
-/// Convert a slice of eight u8 elements into a u64
+/// Convert a array of eight u8 elements into a u64
 /// Assumes little endianness.
 ///
 /// # Examples
@@ -16,7 +17,7 @@ pub fn as_u64_le(arr: &[u8; 8]) -> u64 {
         .sum()
 }
 
-/// Convert a slice of two u8 elements into a u16
+/// Convert a array of two u8 elements into a u16
 /// Assumes little endianness.
 ///
 /// # Examples
@@ -30,4 +31,16 @@ pub fn as_u16_le(arr: &[u8; 2]) -> u16 {
         .enumerate()
         .map(|(i, v)| (v.clone() as u16) << (8 * i))
         .sum()
+}
+
+/// Convert a u8 slice to a string
+///
+/// # Examples
+/// ```
+/// use px4_ulog::unpack;
+/// let arr: [u8; 5] = [72, 101, 108, 108, 111];
+/// assert_eq!(unpack::as_str(&arr).unwrap(), "Hello");
+/// ```
+pub fn as_str(arr: &[u8]) -> Result<&str> {
+    std::str::from_utf8(arr).map_err(|_| Error::new(ErrorKind::Other, "data is not a string"))
 }
