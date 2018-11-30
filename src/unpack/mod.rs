@@ -17,6 +17,35 @@ pub fn as_u64_le(arr: &[u8; 8]) -> u64 {
         .sum()
 }
 
+/// Convert a array of four u8 elements into a u32
+/// Assumes little endianness.
+///
+/// # Examples
+/// ```
+/// use px4_ulog::unpack;
+/// let arr: [u8; 4] = [2, 1, 0, 0];
+/// assert_eq!(unpack::as_u32_le(&arr), 258);
+/// ```
+pub fn as_u32_le(arr: &[u8; 4]) -> u32 {
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| (v.clone() as u32) << (8 * i))
+        .sum()
+}
+
+/// Convert a array of four u8 elements into a i32
+/// Assumes little endianness.
+///
+/// # Examples
+/// ```
+/// use px4_ulog::unpack;
+/// let arr: [u8; 4] = [1, 0, 0, 255];
+/// assert_eq!(unpack::as_i32_le(&arr), -16777215);
+/// ```
+pub fn as_i32_le(arr: &[u8; 4]) -> i32 {
+    as_u32_le(arr) as i32
+}
+
 /// Convert a array of two u8 elements into a u16
 /// Assumes little endianness.
 ///
@@ -31,6 +60,19 @@ pub fn as_u16_le(arr: &[u8; 2]) -> u16 {
         .enumerate()
         .map(|(i, v)| (v.clone() as u16) << (8 * i))
         .sum()
+}
+
+/// Convert a array of four u8 elements into a f32
+/// Assumes little endianness.
+///
+/// # Examples
+/// ```
+/// use px4_ulog::unpack;
+/// let arr: [u8; 4] = [0xc000, 0, 0, 0];
+/// assert_eq!(unpack::as_f32_le(&arr), 0.0);
+/// ```
+pub fn as_f32_le(arr: &[u8; 4]) -> f32 {
+    unsafe { *(&as_u32_le(arr) as *const u32 as *const f32) }
 }
 
 /// Convert a u8 slice to a string

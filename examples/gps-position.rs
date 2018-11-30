@@ -16,7 +16,12 @@ fn main() {
         .unwrap()
         .collect();
 
-    for data in gps_positions {
-        println!("GPS data: {:?}", data);
+    println!("Measurements: {}", gps_positions.len());
+
+    for dataset in gps_positions.iter() {
+        println!("--------------------------");
+        for (name, val) in dataset.iter() {
+            println!("{}: {:?}", name, val);
+        }
     }
 }

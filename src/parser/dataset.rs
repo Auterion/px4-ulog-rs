@@ -48,7 +48,6 @@ impl<'a> Iterator for ULogDataset<'a> {
         if let Ok(item) = data {
             Some(item)
         } else {
-            println!("Got an error: {:?}", data.err());
             None
         }
     }
@@ -84,7 +83,7 @@ fn get_next_data(dataset: &mut ULogDataset) -> Result<ULogData> {
                 let data_msg_id = unpack::as_u16_le(&msg_id_data);
 
                 if data_msg_id == dataset.msg_id {
-                    let ulog_data = ULogData::new(data[3..].to_vec());
+                    let ulog_data = ULogData::new(data[2..].to_vec(), dataset.formats.clone());
                     return Ok(ulog_data);
                 }
             }
