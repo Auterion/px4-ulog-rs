@@ -7,6 +7,7 @@ use super::message::*;
 use models::{MessageType, ULogData, ULogMessage};
 use unpack;
 
+/// A pointer to a dataset in the log file
 pub struct ULogDataset<'a> {
     messages: Vec<ULogMessage>,
     formats: Vec<String>,
@@ -28,6 +29,23 @@ impl<'a> ULogDataset<'a> {
 }
 
 pub trait ULogDatasetSource<'a> {
+    /// Get a dataset from the log file
+    ///
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use px4_ulog::models::*;
+    /// use px4_ulog::parser::dataset::*;
+    ///
+    /// let filename = format!("{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg", env!("CARGO_MANIFEST_DIR"));
+    /// let mut log_file = File::open(&filename).unwrap();
+    ///  
+    /// let gps_positions: Vec<ULogData> = log_file
+    ///     .get_dataset("vehicle_gps_position")
+    ///     .unwrap()
+    ///     .collect();
+    /// assert_eq!(gps_positions.len(), 260);
+    /// ```
     fn get_dataset(&'a mut self, name: &'a str) -> Result<ULogDataset<'a>>;
 }
 
