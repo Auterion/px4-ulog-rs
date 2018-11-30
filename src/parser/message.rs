@@ -1,3 +1,4 @@
+use models::ULogMessage;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -13,6 +14,7 @@ pub trait ULogMessageSource {
     /// ```
     /// use std::iter::*;
     /// use px4_ulog::parser::message::*;
+    /// use px4_ulog::models::*;
     ///
     /// let filename = format!("{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg", env!("CARGO_MANIFEST_DIR"));
     /// let mut log_file = std::fs::File::open(&filename).unwrap();
@@ -30,55 +32,6 @@ pub trait ULogMessageSource {
 pub struct ULogMessageIter<'a> {
     position: u64,
     file: &'a mut File,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum MessageType {
-    Unknown,
-    Format,
-    Data,
-    Info,
-    MultipleInfo,
-    Parameter,
-    AddLoggedMessage,
-    RemoveLoggedMessage,
-    Sync,
-    Dropout,
-    Logging,
-    FlagBits,
-}
-
-pub struct ULogMessage {
-    msg_type: u8,
-    msg_size: u16,
-    msg_pos: u64,
-}
-
-impl ULogMessage {
-    pub fn msg_type(&self) -> MessageType {
-        match self.msg_type as char {
-            'F' => MessageType::Format,
-            'D' => MessageType::Data,
-            'I' => MessageType::Info,
-            'M' => MessageType::MultipleInfo,
-            'P' => MessageType::Parameter,
-            'A' => MessageType::AddLoggedMessage,
-            'R' => MessageType::RemoveLoggedMessage,
-            'S' => MessageType::Sync,
-            'O' => MessageType::Dropout,
-            'L' => MessageType::Logging,
-            'B' => MessageType::FlagBits,
-            _ => MessageType::Unknown,
-        }
-    }
-
-    pub fn size(&self) -> u16 {
-        self.msg_size
-    }
-
-    pub fn position(&self) -> u64 {
-        self.msg_pos
-    }
 }
 
 impl ULogMessageSource for File {
@@ -114,10 +67,6 @@ impl<'a> Iterator for ULogMessageIter<'a> {
 
         self.position += msg_size as u64 + 3;
 
-        Some(ULogMessage {
-            msg_type,
-            msg_size,
-            msg_pos,
-        })
+        Some(ULogMessage::new(msg_type, msg_size, msg_pos))
     }
 }
