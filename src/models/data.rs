@@ -1,17 +1,39 @@
 use unpack;
 
+/// Container for a single data row
 #[derive(Debug)]
 pub struct ULogData {
     data: Vec<u8>,
     formats: Vec<String>,
 }
 
+/// Data set iterator
+///
+/// # Examples
+/// ```
+/// use std::fs::File;
+/// use px4_ulog::parser::dataset::*;
+/// let filename = format!(
+///     "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
+///     env!("CARGO_MANIFEST_DIR")
+/// );
+///
+/// let mut log_file = File::open(&filename).unwrap();
+///
+/// let starting_gps_position = log_file
+///     .get_dataset("vehicle_gps_position")
+///     .unwrap()
+///     .next()
+///     .unwrap();
+/// assert_eq!(starting_gps_position.iter().count(), 23);
+/// ```
 pub struct ULogDataIter<'a> {
     data: &'a ULogData,
     format_index: usize,
     data_index: usize,
 }
 
+/// Log data item type
 #[derive(Debug, PartialEq)]
 pub enum DataType {
     UInt64(u64),
@@ -26,22 +48,64 @@ impl ULogData {
         Self { data, formats }
     }
 
+    /// Get the unformatted data for this item
     pub fn data(&self) -> &Vec<u8> {
         &self.data
     }
 
+    /// Get the data formatting for this item
     pub fn formats(&self) -> &Vec<String> {
         &self.formats
     }
 
+    /// Get the list of field names in this item
+    ///
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use px4_ulog::parser::dataset::*;
+    /// let filename = format!(
+    ///     "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
+    ///     env!("CARGO_MANIFEST_DIR")
+    /// );
+    ///
+    /// let mut log_file = File::open(&filename).unwrap();
+    /// let items = log_file.get_dataset("vehicle_gps_position")
+    ///     .unwrap()
+    ///     .next()
+    ///     .unwrap()
+    ///     .items();
+    /// assert_eq!(items[0], "timestamp");
+    /// assert_eq!(items[1], "time_utc_usec");
+    /// assert_eq!(items.len(), 23);
+    /// ```
     pub fn items(&self) -> Vec<String> {
         self.formats
             .iter()
-            .filter(|f| f.len() > 0 && !f.starts_with("_padding") && f.contains(" "))
+            .filter(|f| f.len() > 0 && !f.contains("_padding") && f.contains(" "))
             .map(|f| f.split(" ").last().unwrap().to_string())
             .collect()
     }
 
+    /// Get an iterator for data fields
+    ///
+    /// The iterator value will be a tuple of (&str, DataType)
+    /// where the first item will be the field name and the second the value.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use px4_ulog::parser::dataset::*;
+    /// let filename = format!(
+    ///     "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
+    ///     env!("CARGO_MANIFEST_DIR")
+    /// );
+    ///
+    /// let mut log_file = File::open(&filename).unwrap();
+    /// let mut dataset = log_file.get_dataset("vehicle_gps_position").unwrap();
+    /// let first_data = dataset.next().unwrap();
+    /// assert_eq!(first_data.iter().count(), 23);
+    /// ```
     pub fn iter(&self) -> ULogDataIter {
         ULogDataIter {
             data: self,
@@ -131,6 +195,7 @@ impl<'a> Iterator for ULogDataIter<'a> {
 mod tests {
     use super::*;
     use parser::dataset::*;
+    use std::collections::HashMap;
     use std::fs::File;
 
     #[test]
@@ -148,7 +213,14 @@ mod tests {
             .next()
             .unwrap();
 
+        let items = first_position.items();
+        let mut seen = HashMap::new();
+        for item in items.clone() {
+            seen.insert(item.clone(), 0);
+        }
+
         for (name, data) in first_position.iter() {
+            *seen.get_mut(name).unwrap() += 1;
             match name {
                 "timestamp" => assert_eq!(DataType::UInt64(375408345), data),
                 "time_utc_usec" => assert_eq!(DataType::UInt64(0), data),
@@ -175,6 +247,10 @@ mod tests {
                 "satellites_used" => assert_eq!(DataType::UInt8(10), data),
                 x => panic!(format!("unexpected field '{}'", x)),
             }
+        }
+
+        for item in items {
+            assert_eq!(seen.get(item.as_str()), Some(&1), "item {} not seen", item);
         }
     }
 }
