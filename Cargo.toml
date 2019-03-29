@@ -4,5 +4,7 @@ version = "0.1.1"
 authors = ["Ilari Mäkimattila <ilari@auterion.com>"]
 description = "PX4 ULog parsing library"
 license = "MIT"
+edition = "2018"
 
 [dependencies]
+byteorder = "1"

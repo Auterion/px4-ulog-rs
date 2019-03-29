@@ -4,8 +4,8 @@ use std::io::{Error, ErrorKind, Result, SeekFrom};
 use std::str;
 
 use super::message::*;
-use models::{MessageType, ULogData, ULogMessage};
-use unpack;
+use crate::models::{MessageType, ULogData, ULogMessage};
+use crate::unpack;
 
 /// A pointer to a dataset in the log file
 pub struct ULogDataset<'a> {

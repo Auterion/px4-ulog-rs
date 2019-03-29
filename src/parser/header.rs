@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{Result, SeekFrom};
 
-use unpack;
+use crate::unpack;
 
 const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
 
@@ -25,10 +25,11 @@ impl ULogHeader for File {
     /// assert!(log_file.is_ulog());
     /// ```
     fn is_ulog(&mut self) -> bool {
-        self.has_valid_ulog_header().unwrap_or(false) && self
-            .read_ulog_version()
-            .and_then(|_| self.read_start_timestamp())
-            .is_ok()
+        self.has_valid_ulog_header().unwrap_or(false)
+            && self
+                .read_ulog_version()
+                .and_then(|_| self.read_start_timestamp())
+                .is_ok()
     }
 
     /// Validates that the file has a valid header
@@ -45,7 +46,7 @@ impl ULogHeader for File {
         self.seek(SeekFrom::Start(0))?;
         let mut buffer = [0; 7];
         if let Ok(bytes) = self.read(&mut buffer) {
-            Ok(bytes == 7 && buffer == HEADER_BYTES)
+            Ok(bytes == buffer.len() && buffer == HEADER_BYTES)
         } else {
             Ok(false)
         }
