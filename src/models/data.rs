@@ -1,4 +1,4 @@
-use unpack;
+use crate::unpack;
 
 /// Container for a single data row
 #[derive(Debug)]
@@ -254,7 +254,7 @@ impl<'a> Iterator for ULogDataIter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parser::dataset::*;
+    use crate::parser::dataset::*;
     use std::collections::HashMap;
     use std::fs::File;
 
