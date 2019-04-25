@@ -204,6 +204,11 @@ impl<'c> LogParser<'c> {
             return Ok(0);
         }
         let msg = model::ULogMessage::new(msg_type, &buf[3..(3 + msg_size as usize)]);
+        self.parse_message(msg)?;
+        Ok(consumed_len)
+    }
+
+    fn parse_message(&mut self, msg: model::ULogMessage) -> Result<(), UlogParseError> {
         match msg.msg_type() {
             model::MessageType::FlagBits => {
                 if self.status != ParseStatus::AfterHeader {
@@ -292,8 +297,7 @@ impl<'c> LogParser<'c> {
 
             _ => (),
         }
-
-        Ok(consumed_len)
+        Ok(())
     }
 }
 
