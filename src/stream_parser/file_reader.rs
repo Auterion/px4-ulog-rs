@@ -1,7 +1,12 @@
+use std::borrow::BorrowMut;
+use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Read;
 use std::iter::FromIterator;
+use std::ops::DerefMut;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -81,6 +86,7 @@ impl DataFormat {
 #[derive(Default)]
 pub struct LogParser<'c> {
     data_message_callback: Option<&'c mut FnMut(&model::DataMessage)>,
+    logged_string_message_callback: Option<&'c mut FnMut(&model::LoggedStringMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -116,6 +122,12 @@ pub enum ParseErrorType {
 impl<'c> LogParser<'c> {
     pub fn set_data_message_callback<CB: FnMut(&model::DataMessage)>(&mut self, c: &'c mut CB) {
         self.data_message_callback = Some(c)
+    }
+    pub fn set_logged_string_message_callback<CB: FnMut(&model::LoggedStringMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.logged_string_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -249,7 +261,23 @@ impl<'c> LogParser<'c> {
             }
             model::MessageType::Logging => {
                 self.transition_to_data_section_if_necessary(msg.msg_type())?;
-                //TODO: read message
+                if msg.data.len() < 9 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        &"Logged string message was too short",
+                    ));
+                }
+                let log_level = msg.data[0];
+                let timestamp = unpack::as_u64_le(&msg.data[1..9]);
+                // Replace non-UTF-8 characters with placeholders, a partial message is still better than none.
+                let logged_message = String::from_utf8_lossy(&msg.data[9..]);
+                if let Some(cb) = &mut self.logged_string_message_callback {
+                    cb(&model::LoggedStringMessage {
+                        log_level,
+                        timestamp,
+                        logged_message: &logged_message,
+                    })
+                }
             }
             model::MessageType::Data => {
                 if self.status != ParseStatus::InData {
@@ -686,19 +714,34 @@ pub enum SimpleCallbackResult {
     Stop,
 }
 
-pub fn read_file_with_simple_callback<CB: FnMut(&model::DataMessage) -> SimpleCallbackResult>(
+pub enum Message<'a> {
+    Data(&'a model::DataMessage<'a>),
+    LoggedMessage(&'a model::LoggedStringMessage<'a>),
+}
+
+pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
     file_path: &str,
     c: &mut CB,
 ) -> Result<usize, std::io::Error> {
     let stop_reading = Arc::new(AtomicBool::new(false));
-    let stop_reading_capture = stop_reading.clone();
-    let mut wrapped_data_message_callback = move |data_message: &DataMessage| {
-        if let SimpleCallbackResult::Stop = c(&data_message) {
-            stop_reading_capture.as_ref().store(true, Ordering::Relaxed)
+    let c_cell: Rc<RefCell<&mut CB>> = Rc::new(RefCell::new(c));
+    let mut wrapped_data_message_callback = |data_message: &DataMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.as_ref().borrow_mut().deref_mut()(&Message::Data(&data_message))
+        {
+            stop_reading.store(true, Ordering::Relaxed)
+        }
+    };
+    let mut wrapped_string_message_callback = |data_message: &model::LoggedStringMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.as_ref().borrow_mut().deref_mut()(&Message::LoggedMessage(&data_message))
+        {
+            stop_reading.store(true, Ordering::Relaxed)
         }
     };
     let mut log_parser = LogParser::default();
     log_parser.set_data_message_callback(&mut wrapped_data_message_callback);
+    log_parser.set_logged_string_message_callback(&mut wrapped_string_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
