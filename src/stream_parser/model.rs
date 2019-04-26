@@ -210,7 +210,29 @@ pub struct DataMessage<'a> {
     pub msg_id: u16,
     pub multi_id: MultiId,
     pub flattened_format: &'a FlattenedFormat,
-    pub data: &'a [u8], // this includes the bytes of the message id.
+    pub data: &'a [u8], // this includes the bytes of the msg_id.
+}
+
+pub struct LoggedStringMessage<'a> {
+    pub log_level: u8,
+    pub timestamp: u64,
+    pub logged_message: &'a str,
+}
+
+impl<'a> LoggedStringMessage<'a> {
+    pub fn human_readable_log_level(&self) -> &'static str {
+        match self.log_level as char {
+            '0' => "EMERGENCY",
+            '1' => "ALERT",
+            '2' => "CRITICAL",
+            '3' => "ERROR",
+            '4' => "WARNING",
+            '5' => "NOTICE",
+            '6' => "INFO",
+            '7' => "DEBUG",
+            _ => "UKNOWN",
+        }
+    }
 }
 
 #[cfg(test)]
