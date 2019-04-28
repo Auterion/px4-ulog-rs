@@ -213,6 +213,18 @@ pub struct DataMessage<'a> {
     pub data: &'a [u8], // this includes the bytes of the msg_id.
 }
 
+#[derive(Debug)]
+pub enum LogStage {
+    Definitions,
+    Data,
+}
+
+#[derive(Debug)]
+pub enum ParameterMessage<'a> {
+    Float(&'a str, f32, LogStage),
+    Int32(&'a str, i32, LogStage),
+}
+
 pub struct LoggedStringMessage<'a> {
     pub log_level: u8,
     pub timestamp: u64,
