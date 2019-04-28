@@ -195,4 +195,10 @@ mod tests {
         );
         read_file(&filename).unwrap();
     }
+
+    #[test]
+    fn reads_other_log_file() {
+        let filename = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
+        read_file(&filename).unwrap();
+    }
 }

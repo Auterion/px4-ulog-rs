@@ -11,7 +11,9 @@ use std::sync::Arc;
 use super::model;
 use crate::unpack;
 
-use self::model::{DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, MultiId};
+use self::model::{
+    DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, MultiId, ParameterMessage,
+};
 
 #[derive(Debug, PartialEq)]
 enum ParseStatus {
@@ -85,6 +87,7 @@ impl DataFormat {
 pub struct LogParser<'c> {
     data_message_callback: Option<&'c mut FnMut(&model::DataMessage)>,
     logged_string_message_callback: Option<&'c mut FnMut(&model::LoggedStringMessage)>,
+    parameter_message_callback: Option<&'c mut FnMut(&model::ParameterMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -126,6 +129,12 @@ impl<'c> LogParser<'c> {
         c: &'c mut CB,
     ) {
         self.logged_string_message_callback = Some(c)
+    }
+    pub fn set_parameter_message_callback<CB: FnMut(&model::ParameterMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.parameter_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -256,6 +265,63 @@ impl<'c> LogParser<'c> {
                 })?;
                 self.flattened_format
                     .register_msg_id(msg_id, message_name, multi_id)?;
+            }
+            model::MessageType::Parameter => {
+                let log_stage = match self.status {
+                    ParseStatus::Beginning => {
+                        return Err(UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter message encountered bad status",
+                        ));
+                    }
+                    ParseStatus::AfterHeader => {
+                        self.status = ParseStatus::InDefinitions;
+                        model::LogStage::Definitions
+                    }
+                    ParseStatus::InDefinitions => model::LogStage::Definitions,
+                    ParseStatus::InData => model::LogStage::Data,
+                };
+                let key_len = msg.data[0];
+                let value_bytes = &msg.data()[(1 + key_len as usize)..];
+                if value_bytes.len() != 4 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter message with wrong size encountered",
+                    ));
+                }
+                let key =
+                    std::str::from_utf8(&msg.data()[1..(1 + key_len as usize)]).map_err(|_| {
+                        UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter format message is not a string",
+                        )
+                    })?;
+                let parts: Vec<&str> = key.split(" ").collect();
+                if parts.len() != 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter format message is not a string",
+                    ));
+                }
+                let parameter_message = match parts[0] {
+                    "int32_t" => Ok(ParameterMessage::Int32(
+                        parts[1],
+                        unpack::as_i32_le(value_bytes),
+                        log_stage,
+                    )),
+                    "float" => Ok(ParameterMessage::Float(
+                        parts[1],
+                        unpack::as_f32_le(value_bytes),
+                        log_stage,
+                    )),
+                    _ => Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter format message unexpected type",
+                    )),
+                }?;
+                if let Some(cb) = &mut self.parameter_message_callback {
+                    cb(&parameter_message);
+                }
             }
             model::MessageType::Logging => {
                 self.transition_to_data_section_if_necessary(msg.msg_type())?;
@@ -715,6 +781,7 @@ pub enum SimpleCallbackResult {
 pub enum Message<'a> {
     Data(&'a model::DataMessage<'a>),
     LoggedMessage(&'a model::LoggedStringMessage<'a>),
+    ParameterMessage(&'a model::ParameterMessage<'a>),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -737,9 +804,17 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             stop_reading.store(true, Ordering::Relaxed)
         }
     };
+    let mut wrapped_parameter_message_callback = |parameter_message: &model::ParameterMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.as_ref().borrow_mut().deref_mut()(&Message::ParameterMessage(&parameter_message))
+        {
+            stop_reading.store(true, Ordering::Relaxed)
+        }
+    };
     let mut log_parser = LogParser::default();
     log_parser.set_data_message_callback(&mut wrapped_data_message_callback);
     log_parser.set_logged_string_message_callback(&mut wrapped_string_message_callback);
+    log_parser.set_parameter_message_callback(&mut wrapped_parameter_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
