@@ -628,7 +628,7 @@ fn flatten_data_type(
                 message_name,
                 offset,
                 message_formats,
-                qualified_field_name + message_name + ".",
+                qualified_field_name + ".",
                 already_added_messages,
                 list_to_append_to,
             )?;
