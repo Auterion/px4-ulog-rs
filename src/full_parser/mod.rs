@@ -201,4 +201,21 @@ mod tests {
         let filename = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
         read_file(&filename).unwrap();
     }
+
+    #[test]
+    fn reads_repeated_submessage() {
+        let filename = format!(
+            "{}/tests/fixtures/esc_status_log.ulg",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let parsed_data = read_file(&filename).unwrap();
+        let msg = parsed_data
+            .messages
+            .get("esc_status")
+            .unwrap()
+            .get(&MultiId::new(0))
+            .unwrap();
+
+        assert!(msg.contains_key("esc[5].esc_rpm"));
+    }
 }
