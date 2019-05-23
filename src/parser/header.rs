@@ -25,10 +25,11 @@ impl ULogHeader for File {
     /// assert!(log_file.is_ulog());
     /// ```
     fn is_ulog(&mut self) -> bool {
-        self.has_valid_ulog_header().unwrap_or(false) && self
-            .read_ulog_version()
-            .and_then(|_| self.read_start_timestamp())
-            .is_ok()
+        self.has_valid_ulog_header().unwrap_or(false)
+            && self
+                .read_ulog_version()
+                .and_then(|_| self.read_start_timestamp())
+                .is_ok()
     }
 
     /// Validates that the file has a valid header

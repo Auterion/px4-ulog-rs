@@ -47,6 +47,8 @@ pub trait ULogDatasetSource<'a> {
     /// assert_eq!(gps_positions.len(), 260);
     /// ```
     fn get_dataset(&'a mut self, name: &'a str) -> Result<ULogDataset<'a>>;
+
+    fn get_message_names(&'a mut self) -> Result<Vec<String>>;
 }
 
 impl<'a> ULogDatasetSource<'a> for File {
@@ -54,6 +56,20 @@ impl<'a> ULogDatasetSource<'a> for File {
         let messages: Vec<ULogMessage> = self.messages().collect();
         let set = ULogDataset::new(messages, self, name);
         Ok(set)
+    }
+
+    fn get_message_names(&'a mut self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for message in self.messages().collect::<Vec<ULogMessage>>() {
+            match message.msg_type() {
+                MessageType::Format => {
+                    let (format_name, _) = parse_format(self, &message)?;
+                    names.push(format_name);
+                }
+                _ => (),
+            }
+        }
+        Ok(names)
     }
 }
 
@@ -101,7 +117,11 @@ fn get_next_data(dataset: &mut ULogDataset) -> Result<ULogData> {
                 let data_msg_id = unpack::as_u16_le(&msg_id_data);
 
                 if data_msg_id == dataset.msg_id {
-                    let ulog_data = ULogData::new(data[2..].to_vec(), dataset.formats.clone(), message.position());
+                    let ulog_data = ULogData::new(
+                        data[2..].to_vec(),
+                        dataset.formats.clone(),
+                        message.position(),
+                    );
                     return Ok(ulog_data);
                 }
             }

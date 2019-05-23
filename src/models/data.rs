@@ -47,7 +47,11 @@ pub enum DataType {
 
 impl ULogData {
     pub fn new(data: Vec<u8>, formats: Vec<String>, index: u64) -> Self {
-        Self { data, formats, index }
+        Self {
+            data,
+            formats,
+            index,
+        }
     }
 
     /// Get the unformatted data for this item
@@ -119,31 +123,31 @@ impl ULogData {
 }
 
 pub struct ULogDataItem<'a> {
-  format_name: &'a str,
-  data: DataType,
-  index: u64,
+    format_name: &'a str,
+    data: DataType,
+    index: u64,
 }
 
 impl<'a> ULogDataItem<'a> {
-  fn new(format_name: &'a str, data: DataType, index: u64) -> Self {
-    Self {
-      format_name,
-      data,
-      index,
+    fn new(format_name: &'a str, data: DataType, index: u64) -> Self {
+        Self {
+            format_name,
+            data,
+            index,
+        }
     }
-  }
 
-  pub fn name(&self) -> &'a str {
-    self.format_name
-  }
+    pub fn name(&self) -> &'a str {
+        self.format_name
+    }
 
-  pub fn data(&self) -> &DataType {
-    &self.data
-  }
+    pub fn data(&self) -> &DataType {
+        &self.data
+    }
 
-  pub fn index(&self) -> u64 {
-    self.index
-  }
+    pub fn index(&self) -> u64 {
+        self.index
+    }
 }
 
 impl<'a> Iterator for ULogDataIter<'a> {
@@ -171,7 +175,11 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some(ULogDataItem::new(fname, DataType::UInt64(val), self.file_index + data_from as u64))
+                    Some(ULogDataItem::new(
+                        fname,
+                        DataType::UInt64(val),
+                        self.file_index + data_from as u64,
+                    ))
                 }
                 "int32_t" => {
                     let data_from = self.data_index;
@@ -184,7 +192,11 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some(ULogDataItem::new(fname, DataType::Int32(val), self.file_index + data_from as u64))
+                    Some(ULogDataItem::new(
+                        fname,
+                        DataType::Int32(val),
+                        self.file_index + data_from as u64,
+                    ))
                 }
                 "float" => {
                     let data_from = self.data_index;
@@ -197,7 +209,11 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0.0
                     };
-                    Some(ULogDataItem::new(fname, DataType::Float(val), self.file_index + data_from as u64))
+                    Some(ULogDataItem::new(
+                        fname,
+                        DataType::Float(val),
+                        self.file_index + data_from as u64,
+                    ))
                 }
                 "uint8_t" => {
                     let data_from = self.data_index;
@@ -208,7 +224,11 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some(ULogDataItem::new(fname, DataType::UInt8(val), self.file_index + data_from as u64))
+                    Some(ULogDataItem::new(
+                        fname,
+                        DataType::UInt8(val),
+                        self.file_index + data_from as u64,
+                    ))
                 }
                 "bool" => {
                     let data_from = self.data_index;
@@ -219,7 +239,11 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         false
                     };
-                    Some(ULogDataItem::new(fname, DataType::Bool(val), self.file_index + data_from as u64))
+                    Some(ULogDataItem::new(
+                        fname,
+                        DataType::Bool(val),
+                        self.file_index + data_from as u64,
+                    ))
                 }
                 _ => None,
             }
