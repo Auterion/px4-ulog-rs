@@ -68,7 +68,7 @@ pub fn as_u16_le(arr: &[u8; 2]) -> u16 {
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 4] = [0xc000, 0, 0, 0];
+/// let arr: [u8; 4] = [0, 0, 0, 0];
 /// assert_eq!(unpack::as_f32_le(&arr), 0.0);
 /// ```
 pub fn as_f32_le(arr: &[u8; 4]) -> f32 {
