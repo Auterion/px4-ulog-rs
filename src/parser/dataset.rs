@@ -120,7 +120,7 @@ fn get_next_data(dataset: &mut ULogDataset) -> Result<ULogData> {
                     let ulog_data = ULogData::new(
                         data[2..].to_vec(),
                         dataset.formats.clone(),
-                        message.position(),
+                        message.position() + 2,
                     );
                     return Ok(ulog_data);
                 }
