@@ -20,8 +20,8 @@ fn main() {
 
     for dataset in gps_positions.iter() {
         println!("--------------------------");
-        for (name, val) in dataset.iter() {
-            println!("{}: {:?}", name, val);
+        for item in dataset.iter() {
+            println!("{} at {}: {:?}", item.name(), item.index(), item.data());
         }
     }
 }

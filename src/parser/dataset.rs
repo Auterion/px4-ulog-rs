@@ -101,7 +101,7 @@ fn get_next_data(dataset: &mut ULogDataset) -> Result<ULogData> {
                 let data_msg_id = unpack::as_u16_le(&msg_id_data);
 
                 if data_msg_id == dataset.msg_id {
-                    let ulog_data = ULogData::new(data[2..].to_vec(), dataset.formats.clone());
+                    let ulog_data = ULogData::new(data[2..].to_vec(), dataset.formats.clone(), message.position());
                     return Ok(ulog_data);
                 }
             }

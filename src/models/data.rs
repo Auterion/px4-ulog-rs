@@ -5,6 +5,7 @@ use unpack;
 pub struct ULogData {
     data: Vec<u8>,
     formats: Vec<String>,
+    index: u64,
 }
 
 /// Data set iterator
@@ -31,6 +32,7 @@ pub struct ULogDataIter<'a> {
     data: &'a ULogData,
     format_index: usize,
     data_index: usize,
+    file_index: u64,
 }
 
 /// Log data item type
@@ -44,8 +46,8 @@ pub enum DataType {
 }
 
 impl ULogData {
-    pub fn new(data: Vec<u8>, formats: Vec<String>) -> Self {
-        Self { data, formats }
+    pub fn new(data: Vec<u8>, formats: Vec<String>, index: u64) -> Self {
+        Self { data, formats, index }
     }
 
     /// Get the unformatted data for this item
@@ -111,12 +113,41 @@ impl ULogData {
             data: self,
             format_index: 0,
             data_index: 0,
+            file_index: self.index,
         }
     }
 }
 
+pub struct ULogDataItem<'a> {
+  format_name: &'a str,
+  data: DataType,
+  index: u64,
+}
+
+impl<'a> ULogDataItem<'a> {
+  fn new(format_name: &'a str, data: DataType, index: u64) -> Self {
+    Self {
+      format_name,
+      data,
+      index,
+    }
+  }
+
+  pub fn name(&self) -> &'a str {
+    self.format_name
+  }
+
+  pub fn data(&self) -> &DataType {
+    &self.data
+  }
+
+  pub fn index(&self) -> u64 {
+    self.index
+  }
+}
+
 impl<'a> Iterator for ULogDataIter<'a> {
-    type Item = (&'a str, DataType);
+    type Item = ULogDataItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.format_index > self.data.formats.len() || self.data_index >= self.data.data.len() {
@@ -130,6 +161,7 @@ impl<'a> Iterator for ULogDataIter<'a> {
 
             match dtype {
                 "uint64_t" => {
+                    let data_from = self.data_index;
                     let data_to = self.data_index + 8;
                     let val = if self.data.data.len() > data_to {
                         let mut buf: [u8; 8] = Default::default();
@@ -139,9 +171,10 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some((fname, DataType::UInt64(val)))
+                    Some(ULogDataItem::new(fname, DataType::UInt64(val), self.file_index + data_from as u64))
                 }
                 "int32_t" => {
+                    let data_from = self.data_index;
                     let data_to = self.data_index + 4;
                     let val = if self.data.data.len() > data_to {
                         let mut buf: [u8; 4] = Default::default();
@@ -151,9 +184,10 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some((fname, DataType::Int32(val)))
+                    Some(ULogDataItem::new(fname, DataType::Int32(val), self.file_index + data_from as u64))
                 }
                 "float" => {
+                    let data_from = self.data_index;
                     let data_to = self.data_index + 4;
                     let val = if self.data.data.len() > data_to {
                         let mut buf: [u8; 4] = Default::default();
@@ -163,9 +197,10 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0.0
                     };
-                    Some((fname, DataType::Float(val)))
+                    Some(ULogDataItem::new(fname, DataType::Float(val), self.file_index + data_from as u64))
                 }
                 "uint8_t" => {
+                    let data_from = self.data_index;
                     let val = if self.data.data.len() > self.data_index {
                         let v = self.data.data[self.data_index];
                         self.data_index += 1;
@@ -173,9 +208,10 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         0
                     };
-                    Some((fname, DataType::UInt8(val)))
+                    Some(ULogDataItem::new(fname, DataType::UInt8(val), self.file_index + data_from as u64))
                 }
                 "bool" => {
+                    let data_from = self.data_index;
                     let val = if self.data.data.len() > self.data_index {
                         let v = self.data.data[self.data_index] > 0;
                         self.data_index += 1;
@@ -183,7 +219,7 @@ impl<'a> Iterator for ULogDataIter<'a> {
                     } else {
                         false
                     };
-                    Some((fname, DataType::Bool(val)))
+                    Some(ULogDataItem::new(fname, DataType::Bool(val), self.file_index + data_from as u64))
                 }
                 _ => None,
             }
@@ -219,32 +255,34 @@ mod tests {
             seen.insert(item.clone(), 0);
         }
 
-        for (name, data) in first_position.iter() {
+        for item in first_position.iter() {
+            let name = item.name();
+            let data = item.data();
             *seen.get_mut(name).unwrap() += 1;
             match name {
-                "timestamp" => assert_eq!(DataType::UInt64(375408345), data),
-                "time_utc_usec" => assert_eq!(DataType::UInt64(0), data),
-                "lat" => assert_eq!(DataType::Int32(407423012), data),
-                "lon" => assert_eq!(DataType::Int32(-741792999), data),
-                "alt" => assert_eq!(DataType::Int32(28495), data),
-                "alt_ellipsoid" => assert_eq!(DataType::Int32(0), data),
-                "s_variance_m_s" => assert_eq!(DataType::Float(0.0), data),
-                "c_variance_rad" => assert_eq!(DataType::Float(0.0), data),
-                "eph" => assert_eq!(DataType::Float(0.29999998), data),
-                "epv" => assert_eq!(DataType::Float(0.39999998), data),
-                "hdop" => assert_eq!(DataType::Float(0.0), data),
-                "vdop" => assert_eq!(DataType::Float(0.0), data),
-                "noise_per_ms" => assert_eq!(DataType::Int32(0), data),
-                "jamming_indicator" => assert_eq!(DataType::Int32(0), data),
-                "vel_m_s" => assert_eq!(DataType::Float(0.0), data),
-                "vel_n_m_s" => assert_eq!(DataType::Float(0.0), data),
-                "vel_e_m_s" => assert_eq!(DataType::Float(0.0), data),
-                "vel_d_m_s" => assert_eq!(DataType::Float(0.0), data),
-                "cog_rad" => assert_eq!(DataType::Float(0.0), data),
-                "timestamp_time_relative" => assert_eq!(DataType::Int32(0), data),
-                "fix_type" => assert_eq!(DataType::UInt8(3), data),
-                "vel_ned_valid" => assert_eq!(DataType::Bool(false), data),
-                "satellites_used" => assert_eq!(DataType::UInt8(10), data),
+                "timestamp" => assert_eq!(&DataType::UInt64(375408345), data),
+                "time_utc_usec" => assert_eq!(&DataType::UInt64(0), data),
+                "lat" => assert_eq!(&DataType::Int32(407423012), data),
+                "lon" => assert_eq!(&DataType::Int32(-741792999), data),
+                "alt" => assert_eq!(&DataType::Int32(28495), data),
+                "alt_ellipsoid" => assert_eq!(&DataType::Int32(0), data),
+                "s_variance_m_s" => assert_eq!(&DataType::Float(0.0), data),
+                "c_variance_rad" => assert_eq!(&DataType::Float(0.0), data),
+                "eph" => assert_eq!(&DataType::Float(0.29999998), data),
+                "epv" => assert_eq!(&DataType::Float(0.39999998), data),
+                "hdop" => assert_eq!(&DataType::Float(0.0), data),
+                "vdop" => assert_eq!(&DataType::Float(0.0), data),
+                "noise_per_ms" => assert_eq!(&DataType::Int32(0), data),
+                "jamming_indicator" => assert_eq!(&DataType::Int32(0), data),
+                "vel_m_s" => assert_eq!(&DataType::Float(0.0), data),
+                "vel_n_m_s" => assert_eq!(&DataType::Float(0.0), data),
+                "vel_e_m_s" => assert_eq!(&DataType::Float(0.0), data),
+                "vel_d_m_s" => assert_eq!(&DataType::Float(0.0), data),
+                "cog_rad" => assert_eq!(&DataType::Float(0.0), data),
+                "timestamp_time_relative" => assert_eq!(&DataType::Int32(0), data),
+                "fix_type" => assert_eq!(&DataType::UInt8(3), data),
+                "vel_ned_valid" => assert_eq!(&DataType::Bool(false), data),
+                "satellites_used" => assert_eq!(&DataType::UInt8(10), data),
                 x => panic!(format!("unexpected field '{}'", x)),
             }
         }
