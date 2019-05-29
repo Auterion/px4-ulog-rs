@@ -32,7 +32,7 @@ pub fn read_file(file_path: &str) -> Result<ParsedData, std::io::Error> {
             .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
     }
-    let data_format = parser.get_final_data_format();
+    let mut data_format = parser.get_final_data_format();
 
     let mut messages = HashMap::<String, HashMap<MultiId, HashMap<String, SomeVec>>>::new();
     for msg_id in 0..reader.messages.len() {

@@ -111,10 +111,56 @@ pub struct FlattenedField {
     pub offset: u16, // relative to the beginning of the message ()
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum TimestampFieldType {
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+}
+
+#[derive(Clone, Debug)]
+pub struct TimestampField {
+    pub field_type: TimestampFieldType,
+    pub offset: u16, // relative to the beginning of the message ()
+}
+
+impl TimestampField {
+    pub fn parse_timestamp(&self, data: &[u8]) -> u64 {
+        match self.field_type {
+            TimestampFieldType::UInt8 => u8::parse(&data[self.offset as usize..]) as u64,
+            TimestampFieldType::UInt16 => u16::parse(&data[self.offset as usize..]) as u64,
+            TimestampFieldType::UInt32 => u32::parse(&data[self.offset as usize..]) as u64,
+            TimestampFieldType::UInt64 => u64::parse(&data[self.offset as usize..]),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum FieldLookupError {
     MissingField,
     TypeMismatch,
+}
+
+#[derive(Debug)]
+pub struct UlogParseError {
+    error_type: ParseErrorType,
+    description: String,
+}
+
+impl UlogParseError {
+    pub fn new(error_type: ParseErrorType, description: &str) -> Self {
+        Self {
+            error_type,
+            description: description.to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParseErrorType {
+    InvalidFile,
+    Other,
 }
 
 #[derive(Clone, Debug)]
@@ -122,6 +168,7 @@ pub struct FlattenedFormat {
     pub message_name: String,
     pub fields: Vec<FlattenedField>,
     name_to_field: HashMap<String, FlattenedField>,
+    pub timestamp_field: TimestampField,
     size: u16,
 }
 
@@ -131,16 +178,47 @@ pub trait ParseableFieldType: LittleEndianParser + FlattenedFieldTypeMatcher {}
 impl<T: LittleEndianParser + FlattenedFieldTypeMatcher> ParseableFieldType for T {}
 
 impl FlattenedFormat {
-    pub fn new(message_name: String, fields: Vec<FlattenedField>, size: u16) -> Self {
+    pub fn new(
+        message_name: String,
+        fields: Vec<FlattenedField>,
+        size: u16,
+    ) -> Result<Self, UlogParseError> {
         let name_to_field: HashMap<String, FlattenedField> = fields
             .iter()
             .map(|f| (f.flattened_field_name.to_string(), (*f).clone()))
             .collect();
-        Self {
-            message_name,
-            fields,
-            name_to_field,
-            size,
+        match name_to_field
+            .get("timestamp")
+            .and_then(|field| match field.field_type {
+                FlattenedFieldType::UInt8 => Some(TimestampField {
+                    field_type: TimestampFieldType::UInt8,
+                    offset: field.offset,
+                }),
+                FlattenedFieldType::UInt16 => Some(TimestampField {
+                    field_type: TimestampFieldType::UInt16,
+                    offset: field.offset,
+                }),
+                FlattenedFieldType::UInt32 => Some(TimestampField {
+                    field_type: TimestampFieldType::UInt32,
+                    offset: field.offset,
+                }),
+                FlattenedFieldType::UInt64 => Some(TimestampField {
+                    field_type: TimestampFieldType::UInt64,
+                    offset: field.offset,
+                }),
+                _ => None,
+            }) {
+            Some(timestamp_field) => Ok(Self {
+                message_name,
+                fields,
+                name_to_field,
+                timestamp_field,
+                size,
+            }),
+            None => Err(UlogParseError::new(
+                ParseErrorType::Other,
+                &format!("Message does not have a timestamp field {}", message_name),
+            )),
         }
     }
 
@@ -252,16 +330,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_i32() {
+    fn parses_u32() {
         let mut data: [u8; 256] = [0; 256];
         data[13] = 1;
         let field = FlattenedField {
-            flattened_field_name: "field0".to_string(),
-            field_type: FlattenedFieldType::Int32,
+            flattened_field_name: "timestamp".to_string(),
+            field_type: FlattenedFieldType::UInt32,
             offset: 10, // relative to the beginning of the message ()
         };
         let flattened_format =
-            FlattenedFormat::new("message".to_string(), vec![field.clone()], 500);
+            FlattenedFormat::new("message".to_string(), vec![field.clone()], 500).unwrap();
         let data_msg = DataMessage {
             msg_id: 1,
             multi_id: MultiId(10),
@@ -270,7 +348,7 @@ mod tests {
         };
         let parser = data_msg
             .flattened_format
-            .get_field_parser::<i32>("field0")
+            .get_field_parser::<u32>("timestamp")
             .expect("could not get parser");
         assert_eq!(10, parser.offset());
         assert_eq!(0x01000000, parser.parse(&data));

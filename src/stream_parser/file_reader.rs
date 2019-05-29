@@ -1,3 +1,4 @@
+use crate::stream_parser::model::{ParseErrorType, UlogParseError};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -33,7 +34,8 @@ impl Default for ParseStatus {
 #[derive(Default)]
 pub struct DataFormat {
     flattened_format: HashMap<String, FlattenedFormat>,
-    registered_messages: HashMap<u16, (FlattenedFormat, MultiId)>,
+    // msg_id -> (flattened_format, multi_id, last_timestamp)
+    registered_messages: HashMap<u16, (FlattenedFormat, MultiId, u64)>,
 }
 
 impl DataFormat {
@@ -51,10 +53,10 @@ impl DataFormat {
         multi_id: u8,
     ) -> Result<(), UlogParseError> {
         if let Some(flattened_message) = self.flattened_format.get(message_name) {
-            if let Some(preexisting_message) = self
-                .registered_messages
-                .insert(msg_id, (flattened_message.clone(), MultiId::new(multi_id)))
-            {
+            if let Some(preexisting_message) = self.registered_messages.insert(
+                msg_id,
+                (flattened_message.clone(), MultiId::new(multi_id), 0),
+            ) {
                 return Err(UlogParseError::new(
                     ParseErrorType::Other,
                     &format!(
@@ -78,8 +80,11 @@ impl DataFormat {
     }
 
     // This should actually never return None
-    pub fn get_message_description(&self, msg_id: u16) -> Option<&(FlattenedFormat, MultiId)> {
-        self.registered_messages.get(&msg_id)
+    pub fn get_message_description(
+        &mut self,
+        msg_id: u16,
+    ) -> Option<&mut (FlattenedFormat, MultiId, u64)> {
+        self.registered_messages.get_mut(&msg_id)
     }
 }
 
@@ -98,27 +103,6 @@ pub struct LogParser<'c> {
 
 const MAX_MESSAGE_SIZE: usize = 2 + 1 + (u16::max_value() as usize);
 const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
-
-#[derive(Debug)]
-pub struct UlogParseError {
-    error_type: ParseErrorType,
-    description: String,
-}
-
-impl UlogParseError {
-    fn new(error_type: ParseErrorType, description: &str) -> Self {
-        Self {
-            error_type,
-            description: description.to_string(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ParseErrorType {
-    InvalidFile,
-    Other,
-}
 
 impl<'c> LogParser<'c> {
     pub fn set_data_message_callback<CB: FnMut(&model::DataMessage)>(&mut self, c: &'c mut CB) {
@@ -358,7 +342,7 @@ impl<'c> LogParser<'c> {
                     ));
                 }
                 let msg_id = unpack::as_u16_le(&msg.data[0..2]);
-                let (flattened_format, multi_id) = self
+                let (ref mut flattened_format, ref mut multi_id, ref mut last_timestamp) = self
                     .flattened_format
                     .get_message_description(msg_id)
                     .ok_or_else(|| {
@@ -377,13 +361,21 @@ impl<'c> LogParser<'c> {
                         ),
                     ));
                 }
-                if let Some(cb) = &mut self.data_message_callback {
-                    cb(&DataMessage {
-                        msg_id,
-                        multi_id: multi_id.clone(),
-                        data: msg.data(),
-                        flattened_format,
-                    });
+                let current_timestamp =
+                    flattened_format.timestamp_field.parse_timestamp(msg.data());
+                if *last_timestamp < current_timestamp {
+                    *last_timestamp = current_timestamp;
+                    if let Some(cb) = &mut self.data_message_callback {
+                        cb(&DataMessage {
+                            msg_id,
+                            multi_id: multi_id.clone(),
+                            data: msg.data(),
+                            flattened_format,
+                        });
+                    }
+                } else {
+                    // TODO: have some failure state for this.
+                    // Encountered bad timestamp, ignore
                 }
             }
 
@@ -766,7 +758,7 @@ fn flatten_format(
         }
         result.insert(
             message_name.to_string(),
-            FlattenedFormat::new(message_name.to_string(), flattened_fields, u16_offset),
+            FlattenedFormat::new(message_name.to_string(), flattened_fields, u16_offset)?,
         );
     }
 
