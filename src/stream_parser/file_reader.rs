@@ -90,9 +90,9 @@ impl DataFormat {
 
 #[derive(Default)]
 pub struct LogParser<'c> {
-    data_message_callback: Option<&'c mut FnMut(&model::DataMessage)>,
-    logged_string_message_callback: Option<&'c mut FnMut(&model::LoggedStringMessage)>,
-    parameter_message_callback: Option<&'c mut FnMut(&model::ParameterMessage)>,
+    data_message_callback: Option<&'c mut dyn FnMut(&model::DataMessage)>,
+    logged_string_message_callback: Option<&'c mut dyn FnMut(&model::LoggedStringMessage)>,
+    parameter_message_callback: Option<&'c mut dyn FnMut(&model::ParameterMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
