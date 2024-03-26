@@ -358,8 +358,11 @@ impl<'c> LogParser<'c> {
                         ),
                     ));
                 }
-                let current_timestamp =
-                    flattened_format.timestamp_field.parse_timestamp(msg.data());
+                let timestamp_field = flattened_format.timestamp_field.as_ref().ok_or_else(|| UlogParseError::new(
+                    ParseErrorType::Other,
+                    &format!("Message does not have a timestamp field {}", flattened_format.message_name),
+                ))?;
+                let current_timestamp = timestamp_field.parse_timestamp(msg.data());
                 if *last_timestamp < current_timestamp {
                     *last_timestamp = current_timestamp;
                     if let Some(cb) = &mut self.data_message_callback {

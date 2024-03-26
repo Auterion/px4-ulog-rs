@@ -168,7 +168,7 @@ pub struct FlattenedFormat {
     pub message_name: String,
     pub fields: Vec<FlattenedField>,
     name_to_field: HashMap<String, FlattenedField>,
-    pub timestamp_field: TimestampField,
+    pub timestamp_field: Option<TimestampField>,
     size: u16,
 }
 
@@ -187,7 +187,7 @@ impl FlattenedFormat {
             .iter()
             .map(|f| (f.flattened_field_name.to_string(), (*f).clone()))
             .collect();
-        match name_to_field
+        let timestamp_field = name_to_field
             .get("timestamp")
             .and_then(|field| match field.field_type {
                 FlattenedFieldType::UInt8 => Some(TimestampField {
@@ -207,19 +207,14 @@ impl FlattenedFormat {
                     offset: field.offset,
                 }),
                 _ => None,
-            }) {
-            Some(timestamp_field) => Ok(Self {
-                message_name,
-                fields,
-                name_to_field,
-                timestamp_field,
-                size,
-            }),
-            None => Err(UlogParseError::new(
-                ParseErrorType::Other,
-                &format!("Message does not have a timestamp field {}", message_name),
-            )),
-        }
+            });
+        Ok(Self {
+            message_name,
+            fields,
+            name_to_field,
+            timestamp_field,
+            size,
+        })
     }
 
     pub fn get_field_offset(
