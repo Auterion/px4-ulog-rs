@@ -217,8 +217,27 @@ impl<'c> LogParser<'c> {
                         "flag bits at bad position",
                     ));
                 }
+                let flag_bits = parse_flag_bits(&msg)?;
+
+                // Check for incompatible flag bits. If there's any unknown bits set, we cannot
+                // parse the log
+                const ULOG_INCOMPAT_FLAG0_DATA_APPENDED_MASK: u8 = 1u8 << 0;
+                if (flag_bits.incompat_flags[0] & !ULOG_INCOMPAT_FLAG0_DATA_APPENDED_MASK) != 0 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        &format!("Cannot parse log, incompatible flag bits set (idx={}, value={})", 0, flag_bits.incompat_flags[0])
+                    ));
+                }
+                for flag_idx in 1..flag_bits.incompat_flags.len() {
+                    if flag_bits.incompat_flags[flag_idx] != 0 {
+                        return Err(UlogParseError::new(
+                            ParseErrorType::Other,
+                            &format!("Cannot parse log, incompatible flag bits set (idx={}, value={})", flag_idx, flag_bits.incompat_flags[flag_idx])
+                        ));
+                    }
+                }
+
                 self.status = ParseStatus::InDefinitions;
-                //TODO: read message
             }
             model::MessageType::Format => {
                 let format = parse_format(&msg)?;
@@ -450,6 +469,33 @@ impl MaybeRepeatedType {
             &format!("invalid type string: {}", written_type),
         ))
     }
+}
+
+#[derive(Debug)]
+struct FlagBits {
+    compat_flags: [u8; 8],
+    incompat_flags: [u8; 8],
+    appended_offsets: [u64; 3],
+}
+
+fn parse_flag_bits(message: &model::ULogMessage) -> Result<FlagBits, UlogParseError> {
+    const MINIMUM_MESSAGE_LENGTH: usize = 40;
+    if message.data().len() < MINIMUM_MESSAGE_LENGTH {
+        return Err(UlogParseError::new(
+            ParseErrorType::Other,
+            &format!("FlagBits message too small: {} < 40", message.data.len()),
+        ));
+    }
+
+    let mut compat_flags: [u8; 8] = Default::default();
+    compat_flags.copy_from_slice(&message.data[0..8]);
+    let mut incompat_flags: [u8; 8] = Default::default();
+    incompat_flags.copy_from_slice(&message.data[8..16]);
+    Ok(FlagBits {
+        compat_flags,
+        incompat_flags,
+        appended_offsets: [unpack::as_u64_le( & message.data[16..24]), unpack::as_u64_le( & message.data[24..32]), unpack::as_u64_le( & message.data[32..40])],
+    })
 }
 
 #[derive(Debug)]
