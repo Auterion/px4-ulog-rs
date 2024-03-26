@@ -1,13 +1,10 @@
 use crate::stream_parser::model::{ParseErrorType, UlogParseError};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Read;
 use std::iter::FromIterator;
 use std::ops::DerefMut;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use super::model;
 use crate::unpack;
@@ -780,27 +777,27 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     file_path: &str,
     c: &mut CB,
 ) -> Result<usize, std::io::Error> {
-    let stop_reading = Arc::new(AtomicBool::new(false));
-    let c_cell: Rc<RefCell<&mut CB>> = Rc::new(RefCell::new(c));
+    let stop_reading = Cell::new(false);
+    let c_cell: RefCell<&mut CB> = RefCell::new(c);
     let mut wrapped_data_message_callback = |data_message: &DataMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.as_ref().borrow_mut().deref_mut()(&Message::Data(&data_message))
+            c_cell.borrow_mut().deref_mut()(&Message::Data(&data_message))
         {
-            stop_reading.store(true, Ordering::Relaxed)
+            stop_reading.set(true);
         }
     };
     let mut wrapped_string_message_callback = |data_message: &model::LoggedStringMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.as_ref().borrow_mut().deref_mut()(&Message::LoggedMessage(&data_message))
+            c_cell.borrow_mut().deref_mut()(&Message::LoggedMessage(&data_message))
         {
-            stop_reading.store(true, Ordering::Relaxed)
+            stop_reading.set(true);
         }
     };
     let mut wrapped_parameter_message_callback = |parameter_message: &model::ParameterMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.as_ref().borrow_mut().deref_mut()(&Message::ParameterMessage(&parameter_message))
+            c_cell.borrow_mut().deref_mut()(&Message::ParameterMessage(&parameter_message))
         {
-            stop_reading.store(true, Ordering::Relaxed)
+            stop_reading.set(true);
         }
     };
     let mut log_parser = LogParser::default();
@@ -812,7 +809,7 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     let mut f = std::fs::File::open(file_path)?;
     const READ_START: usize = 64 * 1024;
     let mut buf = [0u8; 1024 * 1024];
-    while !stop_reading.load(Ordering::Relaxed) {
+    while !stop_reading.get() {
         let num_bytes_read = f.read(&mut buf[READ_START..])?;
         if num_bytes_read == 0 {
             break;
