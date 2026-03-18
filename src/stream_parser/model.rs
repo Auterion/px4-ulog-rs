@@ -298,6 +298,43 @@ pub enum ParameterMessage<'a> {
     Int32(&'a str, i32, LogStage),
 }
 
+/// ROS2 log level parsed from message string content.
+/// Used when ROS2 applications log via RCUTILS_LOGGING_USE_STDOUT,
+/// embedding the actual severity in the message text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ros2LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Fatal,
+}
+
+impl Ros2LogLevel {
+    /// Parse ROS2 log level from a string like "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "DEBUG" => Some(Ros2LogLevel::Debug),
+            "INFO" => Some(Ros2LogLevel::Info),
+            "WARN" | "WARNING" => Some(Ros2LogLevel::Warn),
+            "ERROR" => Some(Ros2LogLevel::Error),
+            "FATAL" => Some(Ros2LogLevel::Fatal),
+            _ => None,
+        }
+    }
+
+    /// Get human-readable log level string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Ros2LogLevel::Debug => "DEBUG",
+            Ros2LogLevel::Info => "INFO",
+            Ros2LogLevel::Warn => "WARN",
+            Ros2LogLevel::Error => "ERROR",
+            Ros2LogLevel::Fatal => "FATAL",
+        }
+    }
+}
+
 pub struct LoggedStringMessage<'a> {
     pub log_level: u8,
     pub timestamp: u64,
@@ -305,7 +342,53 @@ pub struct LoggedStringMessage<'a> {
 }
 
 impl<'a> LoggedStringMessage<'a> {
+    /// Parse ROS2 log level from message content.
+    /// ROS2 messages via RCUTILS_LOGGING_USE_STDOUT have format:
+    /// `[component] [LEVEL] [timestamp] [node]: message`
+    /// Returns None if the message doesn't match ROS2 format.
+    pub fn parse_ros2_log_level(&self) -> Option<Ros2LogLevel> {
+        let msg = self.logged_message.trim_start();
+
+        // Check up to 3 bracket groups for the log level.
+        // ROS2 format: [component] [LEVEL] [timestamp] [node]: message
+        // The level is typically in the 1st or 2nd bracket depending on whether
+        // a component prefix is present.
+        let mut remaining = msg;
+        for _ in 0..3 {
+            if !remaining.starts_with('[') {
+                break;
+            }
+            let Some(end_bracket) = remaining.find(']') else {
+                break; // Malformed bracket, stop parsing
+            };
+            let bracket_content = &remaining[1..end_bracket];
+
+            // Check if this bracket contains a log level
+            if let Some(level) = Ros2LogLevel::parse(bracket_content) {
+                return Some(level);
+            }
+
+            // Move past this bracket and any whitespace
+            remaining = remaining[end_bracket + 1..].trim_start();
+        }
+
+        None
+    }
+
+    /// Get human-readable log level.
+    /// First attempts to parse ROS2 log level from message content,
+    /// falls back to ULog log level if ROS2 format not detected.
     pub fn human_readable_log_level(&self) -> &'static str {
+        // Try to parse ROS2 log level from message content first
+        if let Some(ros2_level) = self.parse_ros2_log_level() {
+            return ros2_level.as_str();
+        }
+        // Fall back to ULog log level
+        self.ulog_log_level()
+    }
+
+    /// Get human-readable ULog log level (ignoring any embedded ROS2 level).
+    pub fn ulog_log_level(&self) -> &'static str {
         match self.log_level as char {
             '0' => "EMERGENCY",
             '1' => "ALERT",
@@ -315,7 +398,7 @@ impl<'a> LoggedStringMessage<'a> {
             '5' => "NOTICE",
             '6' => "INFO",
             '7' => "DEBUG",
-            _ => "UKNOWN",
+            _ => "UNKNOWN",
         }
     }
 }
@@ -347,6 +430,85 @@ mod tests {
             .expect("could not get parser");
         assert_eq!(10, parser.offset());
         assert_eq!(0x01000000, parser.parse(&data));
+    }
+
+    #[test]
+    fn parses_ros2_fatal_log_level() {
+        let msg = LoggedStringMessage {
+            log_level: b'7', // ULog DEBUG
+            timestamp: 0,
+            logged_message: "[com.auterion.ros2-logging-cpp.ros2-logging-cpp] [FATAL] [1773790693.987436115] [logging_level_test]: [254] FATAL: This is a fatal message",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Fatal));
+        assert_eq!(msg.human_readable_log_level(), "FATAL");
+        assert_eq!(msg.ulog_log_level(), "DEBUG");
+    }
+
+    #[test]
+    fn parses_ros2_error_log_level() {
+        let msg = LoggedStringMessage {
+            log_level: b'7',
+            timestamp: 0,
+            logged_message: "[com.auterion.ros2-logging-cpp.ros2-logging-cpp] [ERROR] [1234567890.123456789] [my_node]: Something went wrong",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Error));
+        assert_eq!(msg.human_readable_log_level(), "ERROR");
+    }
+
+    #[test]
+    fn parses_ros2_warn_log_level() {
+        let msg = LoggedStringMessage {
+            log_level: b'7',
+            timestamp: 0,
+            logged_message: "[component] [WARN] [1234567890.123456789] [my_node]: Warning message",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Warn));
+        assert_eq!(msg.human_readable_log_level(), "WARN");
+    }
+
+    #[test]
+    fn parses_ros2_info_log_level() {
+        let msg = LoggedStringMessage {
+            log_level: b'7',
+            timestamp: 0,
+            logged_message: "[INFO] [1234567890.123456789] [my_node]: Info message without component prefix",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Info));
+        assert_eq!(msg.human_readable_log_level(), "INFO");
+    }
+
+    #[test]
+    fn parses_ros2_debug_log_level() {
+        let msg = LoggedStringMessage {
+            log_level: b'7',
+            timestamp: 0,
+            logged_message: "[com.test] [DEBUG] [1234567890.123456789] [my_node]: Debug message",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Debug));
+        assert_eq!(msg.human_readable_log_level(), "DEBUG");
+    }
+
+    #[test]
+    fn falls_back_to_ulog_level_for_non_ros2_message() {
+        let msg = LoggedStringMessage {
+            log_level: b'3', // ULog ERROR
+            timestamp: 0,
+            logged_message: "Some regular PX4 log message without ROS2 format",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), None);
+        assert_eq!(msg.human_readable_log_level(), "ERROR");
+        assert_eq!(msg.ulog_log_level(), "ERROR");
+    }
+
+    #[test]
+    fn handles_whitespace_before_ros2_bracket() {
+        let msg = LoggedStringMessage {
+            log_level: b'7',
+            timestamp: 0,
+            logged_message: "  [component] [FATAL] [1234567890.123456789] [my_node]: Message with leading whitespace",
+        };
+        assert_eq!(msg.parse_ros2_log_level(), Some(Ros2LogLevel::Fatal));
+        assert_eq!(msg.human_readable_log_level(), "FATAL");
     }
 
 }
