@@ -517,7 +517,7 @@ fn parse_format(message: &model::ULogMessage) -> Result<Format, UlogParseError> 
 
     let parts: Vec<&str> = format.split(":").collect();
 
-    if parts.len() != 2 || parts.iter().any(|e| e.is_empty()) {
+    if parts.len() != 2 || parts.first().unwrap().is_empty() {
         return Err(UlogParseError::new(
             ParseErrorType::Other,
             &format!("invalid format string: {}", format),
