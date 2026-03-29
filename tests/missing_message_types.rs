@@ -112,10 +112,9 @@ fn test_info_message_synthetic_string_value() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
-            // When InfoMessage is added:
-            // Message::InfoMessage(info) => {
-            //     info_messages.push((info.key.to_string(), info.value.to_vec()));
-            // }
+            Message::InfoMessage(info) => {
+                info_messages.push((info.key.to_string(), info.value.to_vec()));
+            }
         }
         SimpleCallbackResult::KeepReading
     })
@@ -154,9 +153,9 @@ fn test_info_message_multiple_keys() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
-            // Message::InfoMessage(info) => {
-            //     info_keys.push(info.key.to_string());
-            // }
+            Message::InfoMessage(info) => {
+                info_keys.push(info.key.to_string());
+            }
         }
         SimpleCallbackResult::KeepReading
     })
@@ -194,15 +193,15 @@ fn test_info_message_sample_ulg_sys_name() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
-            // Message::InfoMessage(info) => {
-            //     let val_str = String::from_utf8_lossy(info.value).to_string();
-            //     match info.key {
-            //         "sys_name" => sys_name = Some(val_str),
-            //         "ver_hw" => ver_hw = Some(val_str),
-            //         "ver_sw" => ver_sw = Some(val_str),
-            //         _ => {}
-            //     }
-            // }
+            Message::InfoMessage(info) => {
+                let val_str = String::from_utf8_lossy(info.value).to_string();
+                match info.key {
+                    "sys_name" => sys_name = Some(val_str),
+                    "ver_hw" => ver_hw = Some(val_str),
+                    "ver_sw" => ver_sw = Some(val_str),
+                    _ => {}
+                }
+            }
         }
         SimpleCallbackResult::KeepReading
     })
@@ -262,6 +261,7 @@ fn test_multi_info_message_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::MultiInfoMessage(mi) => {
             //     multi_info_count += 1;
             //     assert_eq!(mi.is_continued, false);
@@ -314,6 +314,7 @@ fn test_multi_info_continued_fragments() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::MultiInfoMessage(_) => {
             //     fragment_count += 1;
             // }
@@ -357,6 +358,7 @@ fn test_dropout_message_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::DropoutMessage(dropout) => {
             //     dropout_durations.push(dropout.duration_ms);
             // }
@@ -395,6 +397,7 @@ fn test_dropout_message_zero_duration() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::DropoutMessage(dropout) => {
             //     dropout_durations.push(dropout.duration_ms);
             // }
@@ -426,6 +429,7 @@ fn test_dropout_message_sample_ulg() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::DropoutMessage(dropout) => {
             //     dropout_durations.push(dropout.duration_ms);
             // }
@@ -474,6 +478,7 @@ fn test_sync_message_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::SyncMessage(_) => {
             //     sync_count += 1;
             // }
@@ -507,6 +512,7 @@ fn test_sync_message_magic_bytes_verified() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::SyncMessage(sync) => {
             //     received_magic = Some(sync.magic);
             // }
@@ -551,6 +557,7 @@ fn test_remove_logged_message_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::RemoveLoggedMessage(rm) => {
             //     removed_ids.push(rm.msg_id);
             // }
@@ -591,6 +598,7 @@ fn test_remove_logged_message_nonexistent_id() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::RemoveLoggedMessage(rm) => {
             //     removed_ids.push(rm.msg_id);
             // }
@@ -634,6 +642,7 @@ fn test_tagged_logged_string_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::TaggedLoggedMessage(tlm) => {
             //     tagged_messages.push((
             //         tlm.log_level,
@@ -680,6 +689,7 @@ fn test_tagged_logged_string_different_levels() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::TaggedLoggedMessage(tlm) => {
             //     tagged_levels.push(tlm.log_level);
             // }
@@ -729,6 +739,7 @@ fn test_parameter_default_i32_synthetic() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::ParameterDefaultMessage(pd) => {
             //     if let ParameterDefaultMessage::Int32(name, val, default_types) = pd {
             //         param_defaults.push((*default_types, name.to_string(), *val));
@@ -771,6 +782,7 @@ fn test_parameter_default_current_config() {
             Message::Data(_) => {}
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
+            Message::InfoMessage(_) => {}
             // Message::ParameterDefaultMessage(pd) => {
             //     if let ParameterDefaultMessage::Int32(name, _, default_types) = pd {
             //         param_defaults.push((*default_types, name.to_string()));
@@ -833,7 +845,7 @@ fn test_all_ignored_types_in_one_stream() {
             Message::Data(_) => data_count += 1,
             Message::LoggedMessage(_) => {}
             Message::ParameterMessage(_) => {}
-            // Message::InfoMessage(_) => info_count += 1,
+            Message::InfoMessage(_) => info_count += 1,
             // Message::DropoutMessage(_) => dropout_count += 1,
             // Message::SyncMessage(_) => sync_count += 1,
             // Message::RemoveLoggedMessage(_) => remove_count += 1,

@@ -53,6 +53,7 @@ fn test_quadrotor_local_stream_parse() {
             Message::Data(_) => data_count += 1,
             Message::LoggedMessage(_) => log_count += 1,
             Message::ParameterMessage(_) => param_count += 1,
+            Message::InfoMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })

@@ -304,6 +304,11 @@ pub struct LoggedStringMessage<'a> {
     pub logged_message: &'a str,
 }
 
+pub struct InfoMessage<'a> {
+    pub key: &'a str,
+    pub value: &'a [u8],
+}
+
 impl<'a> LoggedStringMessage<'a> {
     pub fn human_readable_log_level(&self) -> &'static str {
         match self.log_level as char {

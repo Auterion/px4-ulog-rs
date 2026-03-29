@@ -10,7 +10,8 @@ use super::model;
 use crate::unpack;
 
 use self::model::{
-    DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, MultiId, ParameterMessage,
+    DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage, MultiId,
+    ParameterMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -90,6 +91,7 @@ pub struct LogParser<'c> {
     data_message_callback: Option<&'c mut dyn FnMut(&model::DataMessage)>,
     logged_string_message_callback: Option<&'c mut dyn FnMut(&model::LoggedStringMessage)>,
     parameter_message_callback: Option<&'c mut dyn FnMut(&model::ParameterMessage)>,
+    info_message_callback: Option<&'c mut dyn FnMut(&model::InfoMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -116,6 +118,12 @@ impl<'c> LogParser<'c> {
         c: &'c mut CB,
     ) {
         self.parameter_message_callback = Some(c)
+    }
+    pub fn set_info_message_callback<CB: FnMut(&model::InfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.info_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -383,6 +391,35 @@ impl<'c> LogParser<'c> {
                         multi_id: multi_id.clone(),
                         data: msg.data(),
                         flattened_format,
+                    });
+                }
+            }
+
+            model::MessageType::Info => {
+                if msg.data.len() < 1 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Info message too short",
+                    ));
+                }
+                let key_len = msg.data[0] as usize;
+                if msg.data.len() < 1 + key_len {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Info message key_len exceeds message size",
+                    ));
+                }
+                let key_bytes = &msg.data[1..(1 + key_len)];
+                let key = std::str::from_utf8(key_bytes).map_err(|_| {
+                    UlogParseError::new(ParseErrorType::Other, "Info message key is not valid UTF-8")
+                })?;
+                // Key format is "type[size] name" — extract just the name part
+                let key_name = key.split(' ').last().unwrap_or(key);
+                let value = &msg.data[(1 + key_len)..];
+                if let Some(cb) = &mut self.info_message_callback {
+                    cb(&InfoMessage {
+                        key: key_name,
+                        value,
                     });
                 }
             }
@@ -809,6 +846,7 @@ pub enum Message<'a> {
     Data(&'a model::DataMessage<'a>),
     LoggedMessage(&'a model::LoggedStringMessage<'a>),
     ParameterMessage(&'a model::ParameterMessage<'a>),
+    InfoMessage(&'a model::InfoMessage<'a>),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -838,10 +876,18 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             stop_reading.set(true);
         }
     };
+    let mut wrapped_info_message_callback = |info_message: &model::InfoMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::InfoMessage(&info_message))
+        {
+            stop_reading.set(true);
+        }
+    };
     let mut log_parser = LogParser::default();
     log_parser.set_data_message_callback(&mut wrapped_data_message_callback);
     log_parser.set_logged_string_message_callback(&mut wrapped_string_message_callback);
     log_parser.set_parameter_message_callback(&mut wrapped_parameter_message_callback);
+    log_parser.set_info_message_callback(&mut wrapped_info_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
