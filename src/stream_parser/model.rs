@@ -313,6 +313,10 @@ pub struct DropoutMessage {
     pub duration_ms: u16,
 }
 
+pub struct SyncMessage {
+    pub magic: [u8; 8],
+}
+
 impl<'a> LoggedStringMessage<'a> {
     pub fn human_readable_log_level(&self) -> &'static str {
         match self.log_level as char {

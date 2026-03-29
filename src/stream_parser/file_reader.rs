@@ -11,7 +11,7 @@ use crate::unpack;
 
 use self::model::{
     DataMessage, DropoutMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage,
-    MultiId, ParameterMessage,
+    MultiId, ParameterMessage, SyncMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -93,6 +93,7 @@ pub struct LogParser<'c> {
     parameter_message_callback: Option<&'c mut dyn FnMut(&model::ParameterMessage)>,
     info_message_callback: Option<&'c mut dyn FnMut(&model::InfoMessage)>,
     dropout_message_callback: Option<&'c mut dyn FnMut(&model::DropoutMessage)>,
+    sync_message_callback: Option<&'c mut dyn FnMut(&model::SyncMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -131,6 +132,12 @@ impl<'c> LogParser<'c> {
         c: &'c mut CB,
     ) {
         self.dropout_message_callback = Some(c)
+    }
+    pub fn set_sync_message_callback<CB: FnMut(&model::SyncMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.sync_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -413,6 +420,21 @@ impl<'c> LogParser<'c> {
                 let duration_ms = unpack::as_u16_le(&msg.data[0..2]);
                 if let Some(cb) = &mut self.dropout_message_callback {
                     cb(&DropoutMessage { duration_ms });
+                }
+            }
+
+            model::MessageType::Sync => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 8 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Sync message too short",
+                    ));
+                }
+                let mut magic = [0u8; 8];
+                magic.copy_from_slice(&msg.data[0..8]);
+                if let Some(cb) = &mut self.sync_message_callback {
+                    cb(&SyncMessage { magic });
                 }
             }
 
@@ -869,6 +891,7 @@ pub enum Message<'a> {
     ParameterMessage(&'a model::ParameterMessage<'a>),
     InfoMessage(&'a model::InfoMessage<'a>),
     DropoutMessage(&'a model::DropoutMessage),
+    SyncMessage(&'a model::SyncMessage),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -918,6 +941,14 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     log_parser.set_parameter_message_callback(&mut wrapped_parameter_message_callback);
     log_parser.set_info_message_callback(&mut wrapped_info_message_callback);
     log_parser.set_dropout_message_callback(&mut wrapped_dropout_message_callback);
+    let mut wrapped_sync_message_callback = |sync_message: &model::SyncMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::SyncMessage(&sync_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_sync_message_callback(&mut wrapped_sync_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
