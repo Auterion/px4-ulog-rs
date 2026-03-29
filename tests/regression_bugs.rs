@@ -67,17 +67,7 @@ fn test_off_by_one_exact_buffer_boundary() {
     // Feed the entire byte stream in one call — the last message should fit exactly.
     let results = parse_and_collect_data(&bytes);
 
-    // BUG: Currently this returns 0 data messages because the off-by-one
-    // causes the last message (which fits exactly in the buffer) to be
-    // stashed in leftover instead of parsed.
-    //
-    // After fixing: this should be 1.
-    // For now, document the bug:
-    if results.is_empty() {
-        eprintln!("BUG P1-1: Off-by-one causes last message to be lost when it fits exactly in buffer");
-    }
-    // Once fixed, uncomment:
-    // assert_eq!(results.len(), 1, "Expected 1 data message");
+    assert_eq!(results.len(), 1, "Expected 1 data message when it fits exactly in buffer");
 }
 
 #[test]
