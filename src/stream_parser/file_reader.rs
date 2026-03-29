@@ -2,7 +2,7 @@ use crate::stream_parser::model::{ParseErrorType, UlogParseError};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::iter::FromIterator;
 use std::ops::DerefMut;
 
@@ -96,6 +96,7 @@ pub struct LogParser<'c> {
     dropout_message_callback: Option<&'c mut dyn FnMut(&model::DropoutMessage)>,
     sync_message_callback: Option<&'c mut dyn FnMut(&model::SyncMessage)>,
     multi_info_message_callback: Option<&'c mut dyn FnMut(&model::MultiInfoMessage)>,
+    reassembled_multi_info_callback: Option<&'c mut dyn FnMut(&model::ReassembledMultiInfoMessage)>,
     remove_logged_message_callback: Option<&'c mut dyn FnMut(&model::RemoveLoggedMessage)>,
     tagged_logged_string_message_callback: Option<&'c mut dyn FnMut(&model::TaggedLoggedStringMessage)>,
     parameter_default_message_callback: Option<&'c mut dyn FnMut(&model::ParameterDefaultMessage)>,
@@ -105,6 +106,11 @@ pub struct LogParser<'c> {
     message_formats: HashMap<String, Vec<Field>>,
     flattened_format: DataFormat,
     status: ParseStatus,
+    /// Appended data offsets from FlagBits message (up to 3).
+    /// Non-zero values indicate file offsets where appended data sections begin.
+    appended_offsets: [u64; 3],
+    /// Buffer for multi-info fragment reassembly. Maps key name to accumulated value bytes.
+    multi_info_buffer: HashMap<String, Vec<u8>>,
 }
 
 const MAX_MESSAGE_SIZE: usize = 2 + 1 + (u16::max_value() as usize);
@@ -150,6 +156,12 @@ impl<'c> LogParser<'c> {
     ) {
         self.multi_info_message_callback = Some(c)
     }
+    pub fn set_reassembled_multi_info_callback<CB: FnMut(&model::ReassembledMultiInfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.reassembled_multi_info_callback = Some(c)
+    }
     pub fn set_remove_logged_message_callback<CB: FnMut(&model::RemoveLoggedMessage)>(
         &mut self,
         c: &'c mut CB,
@@ -168,6 +180,18 @@ impl<'c> LogParser<'c> {
     ) {
         self.parameter_default_message_callback = Some(c)
     }
+    /// Flush any buffered multi-info fragments. Call this after all data has been
+    /// fed to the parser (i.e., at EOF) to emit partially-buffered multi-info values
+    /// that were never terminated with is_continued=false.
+    pub fn flush_multi_info_buffer(&mut self) {
+        let buffer = std::mem::take(&mut self.multi_info_buffer);
+        for (key, value) in buffer {
+            if let Some(cb) = &mut self.reassembled_multi_info_callback {
+                cb(&model::ReassembledMultiInfoMessage { key, value });
+            }
+        }
+    }
+
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
             assert!(self.leftover.len() < MAX_MESSAGE_SIZE);
@@ -208,6 +232,18 @@ impl<'c> LogParser<'c> {
     // Consumes self to make sure this is the final data_format.
     pub fn get_final_data_format(self) -> DataFormat {
         self.flattened_format
+    }
+
+    /// Returns the appended data offsets from the FlagBits message.
+    /// Non-zero values indicate file positions where appended data sections begin.
+    pub fn appended_offsets(&self) -> &[u64; 3] {
+        &self.appended_offsets
+    }
+
+    /// Resets the parser's leftover buffer so it can cleanly parse data from
+    /// a new file offset (used when seeking to appended data sections).
+    pub fn clear_leftover(&mut self) {
+        self.leftover.clear();
     }
 
     fn transition_to_data_section_if_necessary(
@@ -288,6 +324,7 @@ impl<'c> LogParser<'c> {
                     }
                 }
 
+                self.appended_offsets = flag_bits.appended_offsets;
                 self.status = ParseStatus::InDefinitions;
             }
             model::MessageType::Format => {
@@ -518,12 +555,32 @@ impl<'c> LogParser<'c> {
                 // Key format is "type[size] name" — extract just the name part
                 let key_name = key.split(' ').last().unwrap_or(key);
                 let value = &msg.data[(2 + key_len)..];
+
+                // Still fire the raw per-fragment callback for backward compatibility
                 if let Some(cb) = &mut self.multi_info_message_callback {
                     cb(&MultiInfoMessage {
                         is_continued,
                         key: key_name,
                         value,
                     });
+                }
+
+                // Reassembly: buffer fragments until is_continued=false
+                if self.reassembled_multi_info_callback.is_some() {
+                    let key_owned = key_name.to_string();
+                    let entry = self.multi_info_buffer.entry(key_owned.clone()).or_default();
+                    entry.extend_from_slice(value);
+
+                    if !is_continued {
+                        // Final fragment — emit the reassembled message
+                        let assembled_value = self.multi_info_buffer.remove(&key_owned).unwrap();
+                        if let Some(cb) = &mut self.reassembled_multi_info_callback {
+                            cb(&model::ReassembledMultiInfoMessage {
+                                key: key_owned,
+                                value: assembled_value,
+                            });
+                        }
+                    }
                 }
             }
 
@@ -1151,8 +1208,25 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     let mut f = std::fs::File::open(file_path)?;
     const READ_START: usize = 64 * 1024;
     let mut buf = [0u8; 1024 * 1024];
+    let buf_capacity = buf.len() - READ_START;
+
+    // First pass: read data up to the first appended offset (or the whole file
+    // if no appended data). The FlagBits message is always at the start, so the
+    // appended offsets become available after the first consume_bytes call.
+    let mut file_position: u64 = 0;
     while !stop_reading.get() {
-        let num_bytes_read = f.read(&mut buf[READ_START..])?;
+        // Check if we need to limit the read to stop at the first appended offset
+        let first_appended = log_parser.appended_offsets().iter().copied().find(|&o| o != 0);
+        let max_read = if let Some(offset) = first_appended {
+            if file_position >= offset {
+                break; // We've reached the appended region
+            }
+            std::cmp::min(buf_capacity, (offset - file_position) as usize)
+        } else {
+            buf_capacity
+        };
+
+        let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
         if num_bytes_read == 0 {
             break;
         }
@@ -1160,6 +1234,50 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
         total_bytes_read += num_bytes_read;
+        file_position += num_bytes_read as u64;
     }
+
+    // Parse appended data sections if present.
+    // The ULog spec allows up to 3 appended data sections for crash log recovery.
+    // Each non-zero offset points to a file position where additional data begins.
+    let appended_offsets = *log_parser.appended_offsets();
+    let non_zero_offsets: Vec<u64> = appended_offsets.iter().copied().filter(|&o| o != 0).collect();
+    for (i, &offset) in non_zero_offsets.iter().enumerate() {
+        if stop_reading.get() {
+            break;
+        }
+        // Determine the end boundary: next appended offset or EOF
+        let read_until = non_zero_offsets.get(i + 1).copied();
+
+        // Clear leftover bytes from previous section boundary
+        log_parser.clear_leftover();
+        // Seek to the appended data offset
+        f.seek(SeekFrom::Start(offset))?;
+        let mut section_position = offset;
+
+        while !stop_reading.get() {
+            let max_read = if let Some(end) = read_until {
+                if section_position >= end {
+                    break;
+                }
+                std::cmp::min(buf_capacity, (end - section_position) as usize)
+            } else {
+                buf_capacity
+            };
+
+            let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
+            if num_bytes_read == 0 {
+                break;
+            }
+            log_parser
+                .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e))
+                })?;
+            total_bytes_read += num_bytes_read;
+            section_position += num_bytes_read as u64;
+        }
+    }
+
     Ok(total_bytes_read)
 }
