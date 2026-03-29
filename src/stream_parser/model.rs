@@ -309,6 +309,10 @@ pub struct InfoMessage<'a> {
     pub value: &'a [u8],
 }
 
+pub struct DropoutMessage {
+    pub duration_ms: u16,
+}
+
 impl<'a> LoggedStringMessage<'a> {
     pub fn human_readable_log_level(&self) -> &'static str {
         match self.log_level as char {

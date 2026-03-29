@@ -10,8 +10,8 @@ use super::model;
 use crate::unpack;
 
 use self::model::{
-    DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage, MultiId,
-    ParameterMessage,
+    DataMessage, DropoutMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage,
+    MultiId, ParameterMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -92,6 +92,7 @@ pub struct LogParser<'c> {
     logged_string_message_callback: Option<&'c mut dyn FnMut(&model::LoggedStringMessage)>,
     parameter_message_callback: Option<&'c mut dyn FnMut(&model::ParameterMessage)>,
     info_message_callback: Option<&'c mut dyn FnMut(&model::InfoMessage)>,
+    dropout_message_callback: Option<&'c mut dyn FnMut(&model::DropoutMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -124,6 +125,12 @@ impl<'c> LogParser<'c> {
         c: &'c mut CB,
     ) {
         self.info_message_callback = Some(c)
+    }
+    pub fn set_dropout_message_callback<CB: FnMut(&model::DropoutMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.dropout_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -392,6 +399,20 @@ impl<'c> LogParser<'c> {
                         data: msg.data(),
                         flattened_format,
                     });
+                }
+            }
+
+            model::MessageType::Dropout => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Dropout message too short",
+                    ));
+                }
+                let duration_ms = unpack::as_u16_le(&msg.data[0..2]);
+                if let Some(cb) = &mut self.dropout_message_callback {
+                    cb(&DropoutMessage { duration_ms });
                 }
             }
 
@@ -847,6 +868,7 @@ pub enum Message<'a> {
     LoggedMessage(&'a model::LoggedStringMessage<'a>),
     ParameterMessage(&'a model::ParameterMessage<'a>),
     InfoMessage(&'a model::InfoMessage<'a>),
+    DropoutMessage(&'a model::DropoutMessage),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -883,11 +905,19 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             stop_reading.set(true);
         }
     };
+    let mut wrapped_dropout_message_callback = |dropout_message: &model::DropoutMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::DropoutMessage(&dropout_message))
+        {
+            stop_reading.set(true);
+        }
+    };
     let mut log_parser = LogParser::default();
     log_parser.set_data_message_callback(&mut wrapped_data_message_callback);
     log_parser.set_logged_string_message_callback(&mut wrapped_string_message_callback);
     log_parser.set_parameter_message_callback(&mut wrapped_parameter_message_callback);
     log_parser.set_info_message_callback(&mut wrapped_info_message_callback);
+    log_parser.set_dropout_message_callback(&mut wrapped_dropout_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
