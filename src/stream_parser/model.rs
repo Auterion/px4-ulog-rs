@@ -15,6 +15,8 @@ pub enum MessageType {
     Sync,
     Dropout,
     Logging,
+    TaggedLogging,
+    ParameterDefault,
     FlagBits,
 }
 
@@ -46,6 +48,8 @@ impl<'a> ULogMessage<'a> {
             'S' => MessageType::Sync,
             'O' => MessageType::Dropout,
             'L' => MessageType::Logging,
+            'C' => MessageType::TaggedLogging,
+            'Q' => MessageType::ParameterDefault,
             'B' => MessageType::FlagBits,
             _ => MessageType::Unknown,
         }
@@ -315,6 +319,29 @@ pub struct DropoutMessage {
 
 pub struct SyncMessage {
     pub magic: [u8; 8],
+}
+
+pub struct MultiInfoMessage<'a> {
+    pub is_continued: bool,
+    pub key: &'a str,
+    pub value: &'a [u8],
+}
+
+pub struct RemoveLoggedMessage {
+    pub msg_id: u16,
+}
+
+pub struct TaggedLoggedStringMessage<'a> {
+    pub log_level: u8,
+    pub tag: u16,
+    pub timestamp: u64,
+    pub logged_message: &'a str,
+}
+
+#[derive(Debug)]
+pub enum ParameterDefaultMessage<'a> {
+    Float(&'a str, f32, u8),
+    Int32(&'a str, i32, u8),
 }
 
 impl<'a> LoggedStringMessage<'a> {

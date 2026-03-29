@@ -117,6 +117,10 @@ fn test_info_message_synthetic_string_value() {
             }
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -160,6 +164,10 @@ fn test_info_message_multiple_keys() {
             }
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -208,6 +216,10 @@ fn test_info_message_sample_ulg_sys_name() {
             }
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -270,11 +282,14 @@ fn test_multi_info_message_synthetic() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::MultiInfoMessage(mi) => {
-            //     multi_info_count += 1;
-            //     assert_eq!(mi.is_continued, false);
-            //     assert_eq!(mi.key, "replay");
-            // }
+            Message::MultiInfoMessage(mi) => {
+                multi_info_count += 1;
+                assert_eq!(mi.is_continued, false);
+                assert_eq!(mi.key, "replay");
+            }
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -325,9 +340,12 @@ fn test_multi_info_continued_fragments() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::MultiInfoMessage(_) => {
-            //     fragment_count += 1;
-            // }
+            Message::MultiInfoMessage(_) => {
+                fragment_count += 1;
+            }
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -373,6 +391,10 @@ fn test_dropout_message_synthetic() {
                 dropout_durations.push(dropout.duration_ms);
             }
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -413,6 +435,10 @@ fn test_dropout_message_zero_duration() {
                 dropout_durations.push(dropout.duration_ms);
             }
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -446,6 +472,10 @@ fn test_dropout_message_sample_ulg() {
                 dropout_durations.push(dropout.duration_ms);
             }
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -496,6 +526,10 @@ fn test_sync_message_synthetic() {
             Message::SyncMessage(_) => {
                 sync_count += 1;
             }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -531,6 +565,10 @@ fn test_sync_message_magic_bytes_verified() {
             Message::SyncMessage(sync) => {
                 received_magic = Some(sync.magic);
             }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -575,9 +613,12 @@ fn test_remove_logged_message_synthetic() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::RemoveLoggedMessage(rm) => {
-            //     removed_ids.push(rm.msg_id);
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(rm) => {
+                removed_ids.push(rm.msg_id);
+            }
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -618,9 +659,12 @@ fn test_remove_logged_message_nonexistent_id() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::RemoveLoggedMessage(rm) => {
-            //     removed_ids.push(rm.msg_id);
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(rm) => {
+                removed_ids.push(rm.msg_id);
+            }
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -664,14 +708,17 @@ fn test_tagged_logged_string_synthetic() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::TaggedLoggedMessage(tlm) => {
-            //     tagged_messages.push((
-            //         tlm.log_level,
-            //         tlm.tag,
-            //         tlm.timestamp,
-            //         tlm.logged_message.to_string(),
-            //     ));
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(tlm) => {
+                tagged_messages.push((
+                    tlm.log_level,
+                    tlm.tag,
+                    tlm.timestamp,
+                    tlm.logged_message.to_string(),
+                ));
+            }
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -713,9 +760,12 @@ fn test_tagged_logged_string_different_levels() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::TaggedLoggedMessage(tlm) => {
-            //     tagged_levels.push(tlm.log_level);
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(tlm) => {
+                tagged_levels.push(tlm.log_level);
+            }
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -765,11 +815,15 @@ fn test_parameter_default_i32_synthetic() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::ParameterDefaultMessage(pd) => {
-            //     if let ParameterDefaultMessage::Int32(name, val, default_types) = pd {
-            //         param_defaults.push((*default_types, name.to_string(), *val));
-            //     }
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(pd) => {
+                if let model::ParameterDefaultMessage::Int32(name, val, default_types) = pd {
+                    param_defaults.push((*default_types, name.to_string(), *val));
+                }
+            }
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -810,11 +864,15 @@ fn test_parameter_default_current_config() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
-            // Message::ParameterDefaultMessage(pd) => {
-            //     if let ParameterDefaultMessage::Int32(name, _, default_types) = pd {
-            //         param_defaults.push((*default_types, name.to_string()));
-            //     }
-            // }
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            Message::ParameterDefaultMessage(pd) => {
+                if let model::ParameterDefaultMessage::Int32(name, _, default_types) = pd {
+                    param_defaults.push((*default_types, name.to_string()));
+                }
+            }
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -875,9 +933,11 @@ fn test_all_ignored_types_in_one_stream() {
             Message::InfoMessage(_) => info_count += 1,
             Message::DropoutMessage(_) => dropout_count += 1,
             Message::SyncMessage(_) => sync_count += 1,
-            // Message::RemoveLoggedMessage(_) => remove_count += 1,
-            // Message::TaggedLoggedMessage(_) => tagged_count += 1,
-            // Message::ParameterDefaultMessage(_) => param_default_count += 1,
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => remove_count += 1,
+            Message::TaggedLoggedMessage(_) => tagged_count += 1,
+            Message::ParameterDefaultMessage(_) => param_default_count += 1,
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })

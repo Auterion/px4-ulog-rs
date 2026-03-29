@@ -11,7 +11,8 @@ use crate::unpack;
 
 use self::model::{
     DataMessage, DropoutMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage,
-    MultiId, ParameterMessage, SyncMessage,
+    MultiId, MultiInfoMessage, ParameterDefaultMessage, ParameterMessage, RemoveLoggedMessage,
+    SyncMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -94,6 +95,10 @@ pub struct LogParser<'c> {
     info_message_callback: Option<&'c mut dyn FnMut(&model::InfoMessage)>,
     dropout_message_callback: Option<&'c mut dyn FnMut(&model::DropoutMessage)>,
     sync_message_callback: Option<&'c mut dyn FnMut(&model::SyncMessage)>,
+    multi_info_message_callback: Option<&'c mut dyn FnMut(&model::MultiInfoMessage)>,
+    remove_logged_message_callback: Option<&'c mut dyn FnMut(&model::RemoveLoggedMessage)>,
+    tagged_logged_string_message_callback: Option<&'c mut dyn FnMut(&model::TaggedLoggedStringMessage)>,
+    parameter_default_message_callback: Option<&'c mut dyn FnMut(&model::ParameterDefaultMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
@@ -138,6 +143,30 @@ impl<'c> LogParser<'c> {
         c: &'c mut CB,
     ) {
         self.sync_message_callback = Some(c)
+    }
+    pub fn set_multi_info_message_callback<CB: FnMut(&model::MultiInfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.multi_info_message_callback = Some(c)
+    }
+    pub fn set_remove_logged_message_callback<CB: FnMut(&model::RemoveLoggedMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.remove_logged_message_callback = Some(c)
+    }
+    pub fn set_tagged_logged_string_message_callback<CB: FnMut(&model::TaggedLoggedStringMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.tagged_logged_string_message_callback = Some(c)
+    }
+    pub fn set_parameter_default_message_callback<CB: FnMut(&model::ParameterDefaultMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.parameter_default_message_callback = Some(c)
     }
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
@@ -464,6 +493,138 @@ impl<'c> LogParser<'c> {
                         key: key_name,
                         value,
                     });
+                }
+            }
+
+            model::MessageType::MultipleInfo => {
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "MultiInfo message too short",
+                    ));
+                }
+                let is_continued = (msg.data[0] & 0x01) != 0;
+                let key_len = msg.data[1] as usize;
+                if msg.data.len() < 2 + key_len {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "MultiInfo message key_len exceeds message size",
+                    ));
+                }
+                let key_bytes = &msg.data[2..(2 + key_len)];
+                let key = std::str::from_utf8(key_bytes).map_err(|_| {
+                    UlogParseError::new(ParseErrorType::Other, "MultiInfo message key is not valid UTF-8")
+                })?;
+                // Key format is "type[size] name" — extract just the name part
+                let key_name = key.split(' ').last().unwrap_or(key);
+                let value = &msg.data[(2 + key_len)..];
+                if let Some(cb) = &mut self.multi_info_message_callback {
+                    cb(&MultiInfoMessage {
+                        is_continued,
+                        key: key_name,
+                        value,
+                    });
+                }
+            }
+
+            model::MessageType::RemoveLoggedMessage => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "RemoveLoggedMessage too short",
+                    ));
+                }
+                let msg_id = unpack::as_u16_le(&msg.data[0..2]);
+                if let Some(cb) = &mut self.remove_logged_message_callback {
+                    cb(&RemoveLoggedMessage { msg_id });
+                }
+            }
+
+            model::MessageType::TaggedLogging => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 11 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Tagged logged string message was too short",
+                    ));
+                }
+                let log_level = msg.data[0];
+                let tag = unpack::as_u16_le(&msg.data[1..3]);
+                let timestamp = unpack::as_u64_le(&msg.data[3..11]);
+                let logged_message = String::from_utf8_lossy(&msg.data[11..]);
+                if let Some(cb) = &mut self.tagged_logged_string_message_callback {
+                    cb(&model::TaggedLoggedStringMessage {
+                        log_level,
+                        tag,
+                        timestamp,
+                        logged_message: &logged_message,
+                    });
+                }
+            }
+
+            model::MessageType::ParameterDefault => {
+                let _log_stage = match self.status {
+                    ParseStatus::Beginning => {
+                        return Err(UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter default message encountered bad status",
+                        ));
+                    }
+                    ParseStatus::AfterHeader => {
+                        self.status = ParseStatus::InDefinitions;
+                        model::LogStage::Definitions
+                    }
+                    ParseStatus::InDefinitions => model::LogStage::Definitions,
+                    ParseStatus::InData => model::LogStage::Data,
+                };
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message too short",
+                    ));
+                }
+                let default_types = msg.data[0];
+                let key_len = msg.data[1];
+                let value_bytes = &msg.data()[(2 + key_len as usize)..];
+                if value_bytes.len() != 4 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message with wrong size encountered",
+                    ));
+                }
+                let key =
+                    std::str::from_utf8(&msg.data()[2..(2 + key_len as usize)]).map_err(|_| {
+                        UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter default message key is not a string",
+                        )
+                    })?;
+                let parts: Vec<&str> = key.split(" ").collect();
+                if parts.len() != 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message key format invalid",
+                    ));
+                }
+                let parameter_default_message = match parts[0] {
+                    "int32_t" => Ok(ParameterDefaultMessage::Int32(
+                        parts[1],
+                        unpack::as_i32_le(value_bytes),
+                        default_types,
+                    )),
+                    "float" => Ok(ParameterDefaultMessage::Float(
+                        parts[1],
+                        unpack::as_f32_le(value_bytes),
+                        default_types,
+                    )),
+                    _ => Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message unexpected type",
+                    )),
+                }?;
+                if let Some(cb) = &mut self.parameter_default_message_callback {
+                    cb(&parameter_default_message);
                 }
             }
 
@@ -892,6 +1053,10 @@ pub enum Message<'a> {
     InfoMessage(&'a model::InfoMessage<'a>),
     DropoutMessage(&'a model::DropoutMessage),
     SyncMessage(&'a model::SyncMessage),
+    MultiInfoMessage(&'a model::MultiInfoMessage<'a>),
+    RemoveLoggedMessage(&'a model::RemoveLoggedMessage),
+    TaggedLoggedMessage(&'a model::TaggedLoggedStringMessage<'a>),
+    ParameterDefaultMessage(&'a model::ParameterDefaultMessage<'a>),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -949,6 +1114,38 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
         }
     };
     log_parser.set_sync_message_callback(&mut wrapped_sync_message_callback);
+    let mut wrapped_multi_info_message_callback = |multi_info_message: &model::MultiInfoMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::MultiInfoMessage(&multi_info_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_multi_info_message_callback(&mut wrapped_multi_info_message_callback);
+    let mut wrapped_remove_logged_message_callback = |remove_logged_message: &model::RemoveLoggedMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::RemoveLoggedMessage(&remove_logged_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_remove_logged_message_callback(&mut wrapped_remove_logged_message_callback);
+    let mut wrapped_tagged_logged_string_message_callback = |tagged_message: &model::TaggedLoggedStringMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::TaggedLoggedMessage(&tagged_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_tagged_logged_string_message_callback(&mut wrapped_tagged_logged_string_message_callback);
+    let mut wrapped_parameter_default_message_callback = |param_default_message: &model::ParameterDefaultMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::ParameterDefaultMessage(&param_default_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_parameter_default_message_callback(&mut wrapped_parameter_default_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;

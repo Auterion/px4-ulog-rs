@@ -56,6 +56,10 @@ fn test_quadrotor_local_stream_parse() {
             Message::InfoMessage(_) => {}
             Message::DropoutMessage(_) => {}
             Message::SyncMessage(_) => {}
+            Message::MultiInfoMessage(_) => {}
+            Message::RemoveLoggedMessage(_) => {}
+            Message::TaggedLoggedMessage(_) => {}
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
