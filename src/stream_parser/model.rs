@@ -290,7 +290,7 @@ pub struct DataMessage<'a> {
     pub data: &'a [u8], // this includes the bytes of the msg_id.
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogStage {
     Definitions,
     Data,
@@ -325,6 +325,14 @@ pub struct MultiInfoMessage<'a> {
     pub is_continued: bool,
     pub key: &'a str,
     pub value: &'a [u8],
+}
+
+/// A reassembled multi-info message whose fragments have been concatenated.
+/// Owns its data since the value is built from multiple message payloads.
+#[derive(Clone, Debug)]
+pub struct ReassembledMultiInfoMessage {
+    pub key: String,
+    pub value: Vec<u8>,
 }
 
 pub struct RemoveLoggedMessage {
