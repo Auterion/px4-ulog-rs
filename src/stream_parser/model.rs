@@ -148,8 +148,8 @@ pub enum FieldLookupError {
 
 #[derive(Debug)]
 pub struct UlogParseError {
-    error_type: ParseErrorType,
-    description: String,
+    pub error_type: ParseErrorType,
+    pub description: String,
 }
 
 impl UlogParseError {
@@ -255,7 +255,7 @@ impl FlattenedFormat {
         }
     }
 
-    pub fn field_iter(&self) -> std::slice::Iter<FlattenedField> {
+    pub fn field_iter(&self) -> std::slice::Iter<'_, FlattenedField> {
         self.fields.iter()
     }
 

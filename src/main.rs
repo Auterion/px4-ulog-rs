@@ -1,4 +1,4 @@
-use px4_ulog::full_parser::{read_file, SomeVec, MultiId};
+use px4_ulog::full_parser::{read_file, SomeVec};
 use std::collections::HashSet;
 
 fn main() {

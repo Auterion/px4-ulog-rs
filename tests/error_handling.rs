@@ -789,7 +789,7 @@ fn full_parser_read_file_returns_error_for_bad_file() {
 #[test]
 fn flag_bits_message_too_small_is_error() {
     // Flag bits message needs at least 40 bytes payload. Send less.
-    let mut builder = ULogBuilder::new();
+    let builder = ULogBuilder::new();
     let mut bytes = builder.build();
     // Write a flag bits message with only 10 bytes payload.
     bytes.extend_from_slice(&10u16.to_le_bytes());

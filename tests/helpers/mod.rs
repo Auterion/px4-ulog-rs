@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Helper module for building synthetic ULog byte streams in tests.
 ///
 /// ULog binary format: 16-byte header, then messages each with 3-byte header (u16 size + u8 type).
