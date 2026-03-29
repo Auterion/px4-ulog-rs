@@ -358,7 +358,7 @@ impl<'c> LogParser<'c> {
                     ));
                 }
                 let msg_id = unpack::as_u16_le(&msg.data[0..2]);
-                let (ref mut flattened_format, ref mut multi_id, ref mut last_timestamp) = self
+                let (ref mut flattened_format, ref mut multi_id, _) = self
                     .flattened_format
                     .get_message_description(msg_id)
                     .ok_or_else(|| {
@@ -377,24 +377,13 @@ impl<'c> LogParser<'c> {
                         ),
                     ));
                 }
-                let timestamp_field = flattened_format.timestamp_field.as_ref().ok_or_else(|| UlogParseError::new(
-                    ParseErrorType::Other,
-                    &format!("Message does not have a timestamp field {}", flattened_format.message_name),
-                ))?;
-                let current_timestamp = timestamp_field.parse_timestamp(msg.data());
-                if *last_timestamp < current_timestamp {
-                    *last_timestamp = current_timestamp;
-                    if let Some(cb) = &mut self.data_message_callback {
-                        cb(&DataMessage {
-                            msg_id,
-                            multi_id: multi_id.clone(),
-                            data: msg.data(),
-                            flattened_format,
-                        });
-                    }
-                } else {
-                    // TODO: have some failure state for this.
-                    // Encountered bad timestamp, ignore
+                if let Some(cb) = &mut self.data_message_callback {
+                    cb(&DataMessage {
+                        msg_id,
+                        multi_id: multi_id.clone(),
+                        data: msg.data(),
+                        flattened_format,
+                    });
                 }
             }
 

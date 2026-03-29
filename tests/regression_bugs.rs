@@ -111,13 +111,7 @@ fn test_non_monotonic_timestamp_equal_dropped() {
 
     let results = parse_and_collect_data(&bytes);
 
-    // BUG: The third message (timestamp=200, same as second) is silently dropped.
-    // Flight review needs ALL data points, even with equal timestamps.
-    if results.len() == 2 {
-        eprintln!("BUG P1-2: Data message with equal timestamp silently dropped (got 2, expected 3)");
-    }
-    // Once fixed, uncomment:
-    // assert_eq!(results.len(), 3, "All three data messages should be received");
+    assert_eq!(results.len(), 3, "All three data messages should be received");
 }
 
 #[test]
@@ -140,10 +134,7 @@ fn test_non_monotonic_timestamp_decreasing_dropped() {
 
     let results = parse_and_collect_data(&bytes);
 
-    // The third message (timestamp=150 < 200) is silently dropped.
-    if results.len() == 2 {
-        eprintln!("BUG P1-2b: Data message with decreasing timestamp silently dropped");
-    }
+    assert_eq!(results.len(), 3, "All three data messages should be received including out-of-order");
 }
 
 // =============================================================================
