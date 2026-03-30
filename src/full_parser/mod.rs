@@ -5,7 +5,7 @@ pub use crate::stream_parser::model::{FlattenedFieldType, MultiId};
 use crate::stream_parser::LittleEndianParser;
 use crate::stream_parser::LogParser;
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 
 pub struct ParsedData {
     pub messages: HashMap<String, HashMap<MultiId, HashMap<String, SomeVec>>>,
@@ -23,15 +23,62 @@ pub fn read_file(file_path: &str) -> Result<ParsedData, std::io::Error> {
 
     const READ_START: usize = 64 * 1024;
     let mut buf = [0u8; 1024 * 1024];
+    let buf_capacity = buf.len() - READ_START;
+
+    // Read data up to the first appended offset (or the whole file if none)
+    let mut file_position: u64 = 0;
     loop {
-        let num_bytes_read = f.read(&mut buf[READ_START..])?;
+        let first_appended = parser.appended_offsets().iter().copied().find(|&o| o != 0);
+        let max_read = if let Some(offset) = first_appended {
+            if file_position >= offset {
+                break;
+            }
+            std::cmp::min(buf_capacity, (offset - file_position) as usize)
+        } else {
+            buf_capacity
+        };
+
+        let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
         if num_bytes_read == 0 {
             break;
         }
         parser
             .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
+        file_position += num_bytes_read as u64;
     }
+
+    // Parse appended data sections if present
+    let appended_offsets = *parser.appended_offsets();
+    let non_zero_offsets: Vec<u64> = appended_offsets.iter().copied().filter(|&o| o != 0).collect();
+    for (i, &offset) in non_zero_offsets.iter().enumerate() {
+        let read_until = non_zero_offsets.get(i + 1).copied();
+        parser.clear_leftover();
+        f.seek(SeekFrom::Start(offset))?;
+        let mut section_position = offset;
+        loop {
+            let max_read = if let Some(end) = read_until {
+                if section_position >= end {
+                    break;
+                }
+                std::cmp::min(buf_capacity, (end - section_position) as usize)
+            } else {
+                buf_capacity
+            };
+
+            let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
+            if num_bytes_read == 0 {
+                break;
+            }
+            parser
+                .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e))
+                })?;
+            section_position += num_bytes_read as u64;
+        }
+    }
+
     let mut data_format = parser.get_final_data_format();
 
     let mut messages = HashMap::<String, HashMap<MultiId, HashMap<String, SomeVec>>>::new();

@@ -11,4 +11,5 @@ pub use self::model::ParameterMessage;
 pub use self::model::FieldParser;
 pub use self::model::LoggedStringMessage;
 pub use self::model::ParseableFieldType;
+pub use self::model::ReassembledMultiInfoMessage;
 pub use self::model_helper::LittleEndianParser;

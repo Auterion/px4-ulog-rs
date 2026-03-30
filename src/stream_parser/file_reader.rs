@@ -2,7 +2,7 @@ use crate::stream_parser::model::{ParseErrorType, UlogParseError};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::iter::FromIterator;
 use std::ops::DerefMut;
 
@@ -10,7 +10,9 @@ use super::model;
 use crate::unpack;
 
 use self::model::{
-    DataMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, MultiId, ParameterMessage,
+    DataMessage, DropoutMessage, FlattenedField, FlattenedFieldType, FlattenedFormat, InfoMessage,
+    MultiId, MultiInfoMessage, ParameterDefaultMessage, ParameterMessage, RemoveLoggedMessage,
+    SyncMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -90,12 +92,25 @@ pub struct LogParser<'c> {
     data_message_callback: Option<&'c mut dyn FnMut(&model::DataMessage)>,
     logged_string_message_callback: Option<&'c mut dyn FnMut(&model::LoggedStringMessage)>,
     parameter_message_callback: Option<&'c mut dyn FnMut(&model::ParameterMessage)>,
+    info_message_callback: Option<&'c mut dyn FnMut(&model::InfoMessage)>,
+    dropout_message_callback: Option<&'c mut dyn FnMut(&model::DropoutMessage)>,
+    sync_message_callback: Option<&'c mut dyn FnMut(&model::SyncMessage)>,
+    multi_info_message_callback: Option<&'c mut dyn FnMut(&model::MultiInfoMessage)>,
+    reassembled_multi_info_callback: Option<&'c mut dyn FnMut(&model::ReassembledMultiInfoMessage)>,
+    remove_logged_message_callback: Option<&'c mut dyn FnMut(&model::RemoveLoggedMessage)>,
+    tagged_logged_string_message_callback: Option<&'c mut dyn FnMut(&model::TaggedLoggedStringMessage)>,
+    parameter_default_message_callback: Option<&'c mut dyn FnMut(&model::ParameterDefaultMessage)>,
     version: u8,
     timestamp: u64,
     leftover: Vec<u8>,
     message_formats: HashMap<String, Vec<Field>>,
     flattened_format: DataFormat,
     status: ParseStatus,
+    /// Appended data offsets from FlagBits message (up to 3).
+    /// Non-zero values indicate file offsets where appended data sections begin.
+    appended_offsets: [u64; 3],
+    /// Buffer for multi-info fragment reassembly. Maps key name to accumulated value bytes.
+    multi_info_buffer: HashMap<String, Vec<u8>>,
 }
 
 const MAX_MESSAGE_SIZE: usize = 2 + 1 + (u16::max_value() as usize);
@@ -117,6 +132,66 @@ impl<'c> LogParser<'c> {
     ) {
         self.parameter_message_callback = Some(c)
     }
+    pub fn set_info_message_callback<CB: FnMut(&model::InfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.info_message_callback = Some(c)
+    }
+    pub fn set_dropout_message_callback<CB: FnMut(&model::DropoutMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.dropout_message_callback = Some(c)
+    }
+    pub fn set_sync_message_callback<CB: FnMut(&model::SyncMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.sync_message_callback = Some(c)
+    }
+    pub fn set_multi_info_message_callback<CB: FnMut(&model::MultiInfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.multi_info_message_callback = Some(c)
+    }
+    pub fn set_reassembled_multi_info_callback<CB: FnMut(&model::ReassembledMultiInfoMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.reassembled_multi_info_callback = Some(c)
+    }
+    pub fn set_remove_logged_message_callback<CB: FnMut(&model::RemoveLoggedMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.remove_logged_message_callback = Some(c)
+    }
+    pub fn set_tagged_logged_string_message_callback<CB: FnMut(&model::TaggedLoggedStringMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.tagged_logged_string_message_callback = Some(c)
+    }
+    pub fn set_parameter_default_message_callback<CB: FnMut(&model::ParameterDefaultMessage)>(
+        &mut self,
+        c: &'c mut CB,
+    ) {
+        self.parameter_default_message_callback = Some(c)
+    }
+    /// Flush any buffered multi-info fragments. Call this after all data has been
+    /// fed to the parser (i.e., at EOF) to emit partially-buffered multi-info values
+    /// that were never terminated with is_continued=false.
+    pub fn flush_multi_info_buffer(&mut self) {
+        let buffer = std::mem::take(&mut self.multi_info_buffer);
+        for (key, value) in buffer {
+            if let Some(cb) = &mut self.reassembled_multi_info_callback {
+                cb(&model::ReassembledMultiInfoMessage { key, value });
+            }
+        }
+    }
+
     pub fn consume_bytes(&mut self, mut buf: &[u8]) -> Result<(), UlogParseError> {
         if !self.leftover.is_empty() {
             assert!(self.leftover.len() < MAX_MESSAGE_SIZE);
@@ -129,9 +204,9 @@ impl<'c> LogParser<'c> {
             let leftover_bytes_used = self.parse_single_entry(leftover.as_slice())?;
             std::mem::swap(&mut leftover, &mut self.leftover);
             if leftover_bytes_used == 0 {
-                // If we have no error and nothing to read within this much data, this implementation has issues.
+                // Not enough data yet to parse a complete entry.
+                // Keep the newly appended bytes in leftover (don't truncate them).
                 assert!(self.leftover.len() < MAX_MESSAGE_SIZE);
-                self.leftover.truncate(original_leftover_len);
                 return Ok(());
             }
             if leftover_bytes_used < original_leftover_len {
@@ -157,6 +232,28 @@ impl<'c> LogParser<'c> {
     // Consumes self to make sure this is the final data_format.
     pub fn get_final_data_format(self) -> DataFormat {
         self.flattened_format
+    }
+
+    /// Returns the ULog file format version parsed from the header.
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    /// Returns the start timestamp (microseconds) parsed from the header.
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
+    /// Returns the appended data offsets from the FlagBits message.
+    /// Non-zero values indicate file positions where appended data sections begin.
+    pub fn appended_offsets(&self) -> &[u64; 3] {
+        &self.appended_offsets
+    }
+
+    /// Resets the parser's leftover buffer so it can cleanly parse data from
+    /// a new file offset (used when seeking to appended data sections).
+    pub fn clear_leftover(&mut self) {
+        self.leftover.clear();
     }
 
     fn transition_to_data_section_if_necessary(
@@ -200,7 +297,7 @@ impl<'c> LogParser<'c> {
         let msg_size = unpack::as_u16_le(&buf[0..2]);
         let msg_type = buf[2];
         let consumed_len = msg_size as usize + 3;
-        if buf.len() <= consumed_len {
+        if buf.len() < consumed_len {
             return Ok(0);
         }
         let msg = model::ULogMessage::new(msg_type, &buf[3..(3 + msg_size as usize)]);
@@ -237,6 +334,7 @@ impl<'c> LogParser<'c> {
                     }
                 }
 
+                self.appended_offsets = flag_bits.appended_offsets;
                 self.status = ParseStatus::InDefinitions;
             }
             model::MessageType::Format => {
@@ -358,7 +456,7 @@ impl<'c> LogParser<'c> {
                     ));
                 }
                 let msg_id = unpack::as_u16_le(&msg.data[0..2]);
-                let (ref mut flattened_format, ref mut multi_id, ref mut last_timestamp) = self
+                let (ref mut flattened_format, ref mut multi_id, _) = self
                     .flattened_format
                     .get_message_description(msg_id)
                     .ok_or_else(|| {
@@ -377,24 +475,223 @@ impl<'c> LogParser<'c> {
                         ),
                     ));
                 }
-                let timestamp_field = flattened_format.timestamp_field.as_ref().ok_or_else(|| UlogParseError::new(
-                    ParseErrorType::Other,
-                    &format!("Message does not have a timestamp field {}", flattened_format.message_name),
-                ))?;
-                let current_timestamp = timestamp_field.parse_timestamp(msg.data());
-                if *last_timestamp < current_timestamp {
-                    *last_timestamp = current_timestamp;
-                    if let Some(cb) = &mut self.data_message_callback {
-                        cb(&DataMessage {
-                            msg_id,
-                            multi_id: multi_id.clone(),
-                            data: msg.data(),
-                            flattened_format,
-                        });
+                if let Some(cb) = &mut self.data_message_callback {
+                    cb(&DataMessage {
+                        msg_id,
+                        multi_id: multi_id.clone(),
+                        data: msg.data(),
+                        flattened_format,
+                    });
+                }
+            }
+
+            model::MessageType::Dropout => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Dropout message too short",
+                    ));
+                }
+                let duration_ms = unpack::as_u16_le(&msg.data[0..2]);
+                if let Some(cb) = &mut self.dropout_message_callback {
+                    cb(&DropoutMessage { duration_ms });
+                }
+            }
+
+            model::MessageType::Sync => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 8 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Sync message too short",
+                    ));
+                }
+                let mut magic = [0u8; 8];
+                magic.copy_from_slice(&msg.data[0..8]);
+                if let Some(cb) = &mut self.sync_message_callback {
+                    cb(&SyncMessage { magic });
+                }
+            }
+
+            model::MessageType::Info => {
+                if msg.data.len() < 1 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Info message too short",
+                    ));
+                }
+                let key_len = msg.data[0] as usize;
+                if msg.data.len() < 1 + key_len {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Info message key_len exceeds message size",
+                    ));
+                }
+                let key_bytes = &msg.data[1..(1 + key_len)];
+                let key = std::str::from_utf8(key_bytes).map_err(|_| {
+                    UlogParseError::new(ParseErrorType::Other, "Info message key is not valid UTF-8")
+                })?;
+                // Key format is "type[size] name" — extract just the name part
+                let key_name = key.split(' ').last().unwrap_or(key);
+                let value = &msg.data[(1 + key_len)..];
+                if let Some(cb) = &mut self.info_message_callback {
+                    cb(&InfoMessage {
+                        key: key_name,
+                        value,
+                    });
+                }
+            }
+
+            model::MessageType::MultipleInfo => {
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "MultiInfo message too short",
+                    ));
+                }
+                let is_continued = (msg.data[0] & 0x01) != 0;
+                let key_len = msg.data[1] as usize;
+                if msg.data.len() < 2 + key_len {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "MultiInfo message key_len exceeds message size",
+                    ));
+                }
+                let key_bytes = &msg.data[2..(2 + key_len)];
+                let key = std::str::from_utf8(key_bytes).map_err(|_| {
+                    UlogParseError::new(ParseErrorType::Other, "MultiInfo message key is not valid UTF-8")
+                })?;
+                // Key format is "type[size] name" — extract just the name part
+                let key_name = key.split(' ').last().unwrap_or(key);
+                let value = &msg.data[(2 + key_len)..];
+
+                // Still fire the raw per-fragment callback for backward compatibility
+                if let Some(cb) = &mut self.multi_info_message_callback {
+                    cb(&MultiInfoMessage {
+                        is_continued,
+                        key: key_name,
+                        value,
+                    });
+                }
+
+                // Reassembly: buffer fragments until is_continued=false
+                if self.reassembled_multi_info_callback.is_some() {
+                    let key_owned = key_name.to_string();
+                    let entry = self.multi_info_buffer.entry(key_owned.clone()).or_default();
+                    entry.extend_from_slice(value);
+
+                    if !is_continued {
+                        // Final fragment — emit the reassembled message
+                        let assembled_value = self.multi_info_buffer.remove(&key_owned).unwrap();
+                        if let Some(cb) = &mut self.reassembled_multi_info_callback {
+                            cb(&model::ReassembledMultiInfoMessage {
+                                key: key_owned,
+                                value: assembled_value,
+                            });
+                        }
                     }
-                } else {
-                    // TODO: have some failure state for this.
-                    // Encountered bad timestamp, ignore
+                }
+            }
+
+            model::MessageType::RemoveLoggedMessage => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "RemoveLoggedMessage too short",
+                    ));
+                }
+                let msg_id = unpack::as_u16_le(&msg.data[0..2]);
+                if let Some(cb) = &mut self.remove_logged_message_callback {
+                    cb(&RemoveLoggedMessage { msg_id });
+                }
+            }
+
+            model::MessageType::TaggedLogging => {
+                self.transition_to_data_section_if_necessary(msg.msg_type())?;
+                if msg.data.len() < 11 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Tagged logged string message was too short",
+                    ));
+                }
+                let log_level = msg.data[0];
+                let tag = unpack::as_u16_le(&msg.data[1..3]);
+                let timestamp = unpack::as_u64_le(&msg.data[3..11]);
+                let logged_message = String::from_utf8_lossy(&msg.data[11..]);
+                if let Some(cb) = &mut self.tagged_logged_string_message_callback {
+                    cb(&model::TaggedLoggedStringMessage {
+                        log_level,
+                        tag,
+                        timestamp,
+                        logged_message: &logged_message,
+                    });
+                }
+            }
+
+            model::MessageType::ParameterDefault => {
+                let _log_stage = match self.status {
+                    ParseStatus::Beginning => {
+                        return Err(UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter default message encountered bad status",
+                        ));
+                    }
+                    ParseStatus::AfterHeader => {
+                        self.status = ParseStatus::InDefinitions;
+                        model::LogStage::Definitions
+                    }
+                    ParseStatus::InDefinitions => model::LogStage::Definitions,
+                    ParseStatus::InData => model::LogStage::Data,
+                };
+                if msg.data.len() < 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message too short",
+                    ));
+                }
+                let default_types = msg.data[0];
+                let key_len = msg.data[1];
+                let value_bytes = &msg.data()[(2 + key_len as usize)..];
+                if value_bytes.len() != 4 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message with wrong size encountered",
+                    ));
+                }
+                let key =
+                    std::str::from_utf8(&msg.data()[2..(2 + key_len as usize)]).map_err(|_| {
+                        UlogParseError::new(
+                            ParseErrorType::Other,
+                            "parameter default message key is not a string",
+                        )
+                    })?;
+                let parts: Vec<&str> = key.split(" ").collect();
+                if parts.len() != 2 {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message key format invalid",
+                    ));
+                }
+                let parameter_default_message = match parts[0] {
+                    "int32_t" => Ok(ParameterDefaultMessage::Int32(
+                        parts[1],
+                        unpack::as_i32_le(value_bytes),
+                        default_types,
+                    )),
+                    "float" => Ok(ParameterDefaultMessage::Float(
+                        parts[1],
+                        unpack::as_f32_le(value_bytes),
+                        default_types,
+                    )),
+                    _ => Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message unexpected type",
+                    )),
+                }?;
+                if let Some(cb) = &mut self.parameter_default_message_callback {
+                    cb(&parameter_default_message);
                 }
             }
 
@@ -473,6 +770,7 @@ impl MaybeRepeatedType {
 
 #[derive(Debug)]
 struct FlagBits {
+    #[allow(dead_code)]
     compat_flags: [u8; 8],
     incompat_flags: [u8; 8],
     appended_offsets: [u64; 3],
@@ -820,6 +1118,13 @@ pub enum Message<'a> {
     Data(&'a model::DataMessage<'a>),
     LoggedMessage(&'a model::LoggedStringMessage<'a>),
     ParameterMessage(&'a model::ParameterMessage<'a>),
+    InfoMessage(&'a model::InfoMessage<'a>),
+    DropoutMessage(&'a model::DropoutMessage),
+    SyncMessage(&'a model::SyncMessage),
+    MultiInfoMessage(&'a model::MultiInfoMessage<'a>),
+    RemoveLoggedMessage(&'a model::RemoveLoggedMessage),
+    TaggedLoggedMessage(&'a model::TaggedLoggedStringMessage<'a>),
+    ParameterDefaultMessage(&'a model::ParameterDefaultMessage<'a>),
 }
 
 pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResult>(
@@ -849,17 +1154,90 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             stop_reading.set(true);
         }
     };
+    let mut wrapped_info_message_callback = |info_message: &model::InfoMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::InfoMessage(&info_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    let mut wrapped_dropout_message_callback = |dropout_message: &model::DropoutMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::DropoutMessage(&dropout_message))
+        {
+            stop_reading.set(true);
+        }
+    };
     let mut log_parser = LogParser::default();
     log_parser.set_data_message_callback(&mut wrapped_data_message_callback);
     log_parser.set_logged_string_message_callback(&mut wrapped_string_message_callback);
     log_parser.set_parameter_message_callback(&mut wrapped_parameter_message_callback);
+    log_parser.set_info_message_callback(&mut wrapped_info_message_callback);
+    log_parser.set_dropout_message_callback(&mut wrapped_dropout_message_callback);
+    let mut wrapped_sync_message_callback = |sync_message: &model::SyncMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::SyncMessage(&sync_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_sync_message_callback(&mut wrapped_sync_message_callback);
+    let mut wrapped_multi_info_message_callback = |multi_info_message: &model::MultiInfoMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::MultiInfoMessage(&multi_info_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_multi_info_message_callback(&mut wrapped_multi_info_message_callback);
+    let mut wrapped_remove_logged_message_callback = |remove_logged_message: &model::RemoveLoggedMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::RemoveLoggedMessage(&remove_logged_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_remove_logged_message_callback(&mut wrapped_remove_logged_message_callback);
+    let mut wrapped_tagged_logged_string_message_callback = |tagged_message: &model::TaggedLoggedStringMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::TaggedLoggedMessage(&tagged_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_tagged_logged_string_message_callback(&mut wrapped_tagged_logged_string_message_callback);
+    let mut wrapped_parameter_default_message_callback = |param_default_message: &model::ParameterDefaultMessage| {
+        if let SimpleCallbackResult::Stop =
+            c_cell.borrow_mut().deref_mut()(&Message::ParameterDefaultMessage(&param_default_message))
+        {
+            stop_reading.set(true);
+        }
+    };
+    log_parser.set_parameter_default_message_callback(&mut wrapped_parameter_default_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
     const READ_START: usize = 64 * 1024;
     let mut buf = [0u8; 1024 * 1024];
+    let buf_capacity = buf.len() - READ_START;
+
+    // First pass: read data up to the first appended offset (or the whole file
+    // if no appended data). The FlagBits message is always at the start, so the
+    // appended offsets become available after the first consume_bytes call.
+    let mut file_position: u64 = 0;
     while !stop_reading.get() {
-        let num_bytes_read = f.read(&mut buf[READ_START..])?;
+        // Check if we need to limit the read to stop at the first appended offset
+        let first_appended = log_parser.appended_offsets().iter().copied().find(|&o| o != 0);
+        let max_read = if let Some(offset) = first_appended {
+            if file_position >= offset {
+                break; // We've reached the appended region
+            }
+            std::cmp::min(buf_capacity, (offset - file_position) as usize)
+        } else {
+            buf_capacity
+        };
+
+        let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
         if num_bytes_read == 0 {
             break;
         }
@@ -867,6 +1245,50 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
         total_bytes_read += num_bytes_read;
+        file_position += num_bytes_read as u64;
     }
+
+    // Parse appended data sections if present.
+    // The ULog spec allows up to 3 appended data sections for crash log recovery.
+    // Each non-zero offset points to a file position where additional data begins.
+    let appended_offsets = *log_parser.appended_offsets();
+    let non_zero_offsets: Vec<u64> = appended_offsets.iter().copied().filter(|&o| o != 0).collect();
+    for (i, &offset) in non_zero_offsets.iter().enumerate() {
+        if stop_reading.get() {
+            break;
+        }
+        // Determine the end boundary: next appended offset or EOF
+        let read_until = non_zero_offsets.get(i + 1).copied();
+
+        // Clear leftover bytes from previous section boundary
+        log_parser.clear_leftover();
+        // Seek to the appended data offset
+        f.seek(SeekFrom::Start(offset))?;
+        let mut section_position = offset;
+
+        while !stop_reading.get() {
+            let max_read = if let Some(end) = read_until {
+                if section_position >= end {
+                    break;
+                }
+                std::cmp::min(buf_capacity, (end - section_position) as usize)
+            } else {
+                buf_capacity
+            };
+
+            let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + max_read)])?;
+            if num_bytes_read == 0 {
+                break;
+            }
+            log_parser
+                .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e))
+                })?;
+            total_bytes_read += num_bytes_read;
+            section_position += num_bytes_read as u64;
+        }
+    }
+
     Ok(total_bytes_read)
 }

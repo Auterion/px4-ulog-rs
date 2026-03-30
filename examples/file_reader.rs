@@ -1,5 +1,3 @@
-extern crate px4_ulog;
-
 use std::time::Instant;
 
 fn main() {
