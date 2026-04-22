@@ -208,13 +208,13 @@ fn test_cross_validate_logged_messages() {
 #[test]
 fn test_cross_validate_start_timestamp() {
     // pyulog reports start_timestamp: 112500176
-    use std::fs::File;
-    use px4_ulog::parser::header::ULogHeader;
+    use px4_ulog::stream_parser::LogParser;
 
     let path = fixture_path("sample.ulg");
-    let mut f = File::open(&path).unwrap();
-    let ts = f.read_start_timestamp().unwrap();
-    assert_eq!(ts, 112500176, "Start timestamp should match pyulog");
+    let data = std::fs::read(&path).unwrap();
+    let mut parser = LogParser::default();
+    parser.consume_bytes(&data).unwrap();
+    assert_eq!(parser.timestamp(), 112500176, "Start timestamp should match pyulog");
 }
 
 // =============================================================================
@@ -223,25 +223,20 @@ fn test_cross_validate_start_timestamp() {
 
 #[test]
 fn test_cross_validate_topic_list() {
-    use std::fs::File;
-    use px4_ulog::parser::dataset::ULogDatasetSource;
-
     let path = fixture_path("sample.ulg");
-    let mut f = File::open(&path).unwrap();
-    let names = f.get_message_names().unwrap();
+    let parsed = full_parser::read_file(&path).expect("should parse sample.ulg");
+    let names: Vec<&String> = parsed.messages.keys().collect();
 
-    // pyulog has 15 data topics, but get_message_names returns all FORMAT definitions
-    // which includes sub-message types too. Just verify the data topics are present.
+    // full_parser only includes topics with actual data messages
     let expected_topics = [
         "sensor_combined",
         "vehicle_attitude",
-        "vehicle_gps_position",
         "estimator_status",
     ];
     for topic in &expected_topics {
         assert!(
-            names.iter().any(|n| n == *topic),
-            "Topic '{}' should be in format definitions",
+            names.iter().any(|n| n.as_str() == *topic),
+            "Topic '{}' should be in parsed output",
             topic
         );
     }
@@ -253,17 +248,18 @@ fn test_cross_validate_topic_list() {
 
 #[test]
 fn test_cross_validate_gps_data_count() {
-    use std::fs::File;
-    use px4_ulog::models::ULogData;
-    use px4_ulog::parser::dataset::ULogDatasetSource;
-
     let path = format!(
         "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
         env!("CARGO_MANIFEST_DIR")
     );
-    let mut f = File::open(&path).unwrap();
-    let gps_positions: Vec<ULogData> = f.get_dataset("vehicle_gps_position").unwrap().collect();
-    assert_eq!(gps_positions.len(), 260, "GPS position count should match");
+    let parsed = full_parser::read_file(&path).expect("should parse");
+    let gps = parsed
+        .messages
+        .get("vehicle_gps_position")
+        .and_then(|m| m.get(&MultiId::new(0)))
+        .expect("should have GPS data");
+    let count = somevec_len(gps.get("timestamp").expect("should have timestamp"));
+    assert_eq!(count, 260, "GPS position count should match");
 }
 
 // =============================================================================

@@ -8,65 +8,45 @@
 // ---------------------------------------------------------------------------
 // Test 1: Header info accessible from stream/full parser
 // ---------------------------------------------------------------------------
-// The seek parser exposes version and timestamp via ULogHeader trait on File.
-// The streaming parser already parses the header internally (LogParser stores
-// version and timestamp) but does NOT expose them publicly.
-//
-// TODO: Add public accessors to LogParser:
-//   pub fn version(&self) -> u8
-//   pub fn timestamp(&self) -> u64
-// Then these tests can use LogParser directly instead of the File trait.
+// LogParser exposes version() and timestamp() for header access.
 
 #[test]
-fn header_version_via_seek_parser() {
-    // This test uses the CURRENT seek-parser API. It should pass today and
-    // demonstrates what the unified API must replace.
-    use px4_ulog::parser::header::ULogHeader;
-    let filename = format!(
-        "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let mut log_file = std::fs::File::open(&filename).unwrap();
-    assert_eq!(log_file.read_ulog_version().unwrap(), 1);
-}
-
-#[test]
-fn header_timestamp_via_seek_parser() {
-    // This test uses the CURRENT seek-parser API.
-    use px4_ulog::parser::header::ULogHeader;
-    let filename = format!(
-        "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let mut log_file = std::fs::File::open(&filename).unwrap();
-    assert_eq!(log_file.read_start_timestamp().unwrap(), 373058900);
-}
-
-#[test]
-fn header_version_via_stream_parser_consume_bytes() {
-    // Verify LogParser can parse the header from raw bytes and that version
-    // and timestamp are accessible.
-    //
-    // TODO: This test requires public accessors on LogParser:
-    //   pub fn version(&self) -> u8
-    //   pub fn timestamp(&self) -> u64
-    // Currently these fields are private. Until they are exposed, this test
-    // validates that consume_bytes succeeds on the header without error.
+fn header_version_via_stream_parser() {
     use px4_ulog::stream_parser::LogParser;
-
     let filename = format!(
         "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
         env!("CARGO_MANIFEST_DIR")
     );
     let data = std::fs::read(&filename).unwrap();
     let mut parser = LogParser::default();
-
-    // Feed just the 16-byte header to prove it parses correctly.
     parser.consume_bytes(&data[..16]).unwrap();
+    assert_eq!(parser.version(), 1);
+}
 
-    // TODO: Uncomment once version()/timestamp() are public:
-    // assert_eq!(parser.version(), 1);
-    // assert_eq!(parser.timestamp(), 373058900);
+#[test]
+fn header_timestamp_via_stream_parser() {
+    use px4_ulog::stream_parser::LogParser;
+    let filename = format!(
+        "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let data = std::fs::read(&filename).unwrap();
+    let mut parser = LogParser::default();
+    parser.consume_bytes(&data[..16]).unwrap();
+    assert_eq!(parser.timestamp(), 373058900);
+}
+
+#[test]
+fn header_timestamp_sample_ulg_via_stream_parser() {
+    use px4_ulog::stream_parser::LogParser;
+    let filename = format!(
+        "{}/tests/fixtures/sample.ulg",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let data = std::fs::read(&filename).unwrap();
+    let mut parser = LogParser::default();
+    parser.consume_bytes(&data[..16]).unwrap();
+    assert_eq!(parser.timestamp(), 112500176);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,8 +99,8 @@ fn dataset_extraction_gps_260_points_via_full_parser() {
 }
 
 #[test]
-fn dataset_first_gps_values_match_seek_parser() {
-    // Verify that the first data point values match what the seek parser returns.
+fn dataset_first_gps_values_match_known_reference() {
+    // Verify that the first data point values match known reference values.
     use px4_ulog::full_parser::{read_file, MultiId, SomeVec};
 
     let filename = format!(
@@ -199,25 +179,23 @@ fn dataset_first_gps_values_match_seek_parser() {
 // The full_parser ParsedData.messages HashMap keys serve the same purpose.
 
 #[test]
-fn topic_names_via_seek_parser() {
-    // Current seek parser API. Should pass today.
-    use px4_ulog::parser::dataset::ULogDatasetSource;
+fn topic_names_via_full_parser_main_fixture() {
+    use px4_ulog::full_parser::read_file;
 
     let filename = format!(
         "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
         env!("CARGO_MANIFEST_DIR")
     );
-    let mut log_file = std::fs::File::open(&filename).unwrap();
-    let names = log_file.get_message_names().unwrap();
+    let parsed = read_file(&filename).unwrap();
+    let names: Vec<&String> = parsed.messages.keys().collect();
 
-    // The file should contain format definitions for vehicle_gps_position among others.
     assert!(
-        names.contains(&"vehicle_gps_position".to_string()),
-        "Expected vehicle_gps_position in message names"
+        names.iter().any(|n| n.as_str() == "vehicle_gps_position"),
+        "Expected vehicle_gps_position in parsed topics"
     );
     assert!(
         !names.is_empty(),
-        "Expected at least one message name"
+        "Expected at least one topic"
     );
 }
 
@@ -341,24 +319,9 @@ fn flattened_field_type_supports_all_12_types() {
     assert_eq!(types.len(), 12);
 }
 
-#[test]
-fn seek_parser_data_type_only_has_5_variants() {
-    // This test documents the limitation of the seek parser's DataType enum.
-    // It only supports 5 of 12 ULog types. When the seek parser is removed,
-    // this test should be deleted.
-    use px4_ulog::models::data::DataType;
-
-    let _variants = vec![
-        DataType::UInt64(0),
-        DataType::Int32(0),
-        DataType::Float(0.0),
-        DataType::UInt8(0),
-        DataType::Bool(false),
-    ];
-    // The following types are NOT supported by the seek parser DataType:
-    //   Int8, UInt16, Int16, UInt32, Int64, Double, Char
-    // The full_parser/stream_parser SomeVec and FlattenedFieldType handle all 12.
-}
+// The seek parser's DataType only had 5 of 12 variants. The full/stream parser's
+// SomeVec and FlattenedFieldType handle all 12 — tested in somevec_supports_all_12_data_types
+// and flattened_field_type_supports_all_12_types below.
 
 // ---------------------------------------------------------------------------
 // Test 5: Byte slice input (enables mmap, embedded, no-std-fs use cases)
@@ -684,20 +647,17 @@ fn stream_parser_rejects_empty_input() {
     assert!(result.is_ok(), "Empty input should not cause an error");
 }
 
-// ---------------------------------------------------------------------------
-// Summary of API changes needed for full unification:
-// ---------------------------------------------------------------------------
-//
-// 1. LogParser needs public version() and timestamp() accessors so callers
-//    can get header info without the seek-based ULogHeader trait on File.
-//
-// 2. full_parser::read_file should gain a read_bytes(&[u8]) or
-//    read_from(impl Read) variant so ParsedData can be built from mmap'd
-//    memory or network streams, not just file paths.
-//
-// 3. Once the above are done, the seek parser (src/parser/) can be removed
-//    entirely. The models::DataType enum with only 5 variants becomes
-//    unnecessary, replaced by SomeVec with all 12 types.
-//
-// 4. Consider adding a get_topic(name) convenience method on ParsedData to
-//    replace the get_dataset() pattern, returning all MultiId instances.
+#[test]
+fn full_parser_handles_empty_file_gracefully() {
+    let filename = format!(
+        "{}/tests/fixtures/not_a_log_file.txt",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let result = px4_ulog::full_parser::read_file(&filename);
+    // not_a_log_file.txt is 0 bytes — full_parser returns Ok with empty data
+    // (no bytes to parse means no error, just no messages)
+    match result {
+        Ok(parsed) => assert!(parsed.messages.is_empty(), "Empty file should produce no messages"),
+        Err(_) => {} // Also acceptable — rejecting invalid files is fine
+    }
+}

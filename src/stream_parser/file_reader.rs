@@ -234,6 +234,16 @@ impl<'c> LogParser<'c> {
         self.flattened_format
     }
 
+    /// Returns the ULog file format version parsed from the header.
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    /// Returns the start timestamp (microseconds) parsed from the header.
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
     /// Returns the appended data offsets from the FlagBits message.
     /// Non-zero values indicate file positions where appended data sections begin.
     pub fn appended_offsets(&self) -> &[u64; 3] {
