@@ -15,6 +15,8 @@ pub enum MessageType {
     Sync,
     Dropout,
     Logging,
+    TaggedLogging,
+    ParameterDefault,
     FlagBits,
 }
 
@@ -46,6 +48,8 @@ impl<'a> ULogMessage<'a> {
             'S' => MessageType::Sync,
             'O' => MessageType::Dropout,
             'L' => MessageType::Logging,
+            'C' => MessageType::TaggedLogging,
+            'Q' => MessageType::ParameterDefault,
             'B' => MessageType::FlagBits,
             _ => MessageType::Unknown,
         }
@@ -286,7 +290,7 @@ pub struct DataMessage<'a> {
     pub data: &'a [u8], // this includes the bytes of the msg_id.
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogStage {
     Definitions,
     Data,
@@ -302,6 +306,50 @@ pub struct LoggedStringMessage<'a> {
     pub log_level: u8,
     pub timestamp: u64,
     pub logged_message: &'a str,
+}
+
+pub struct InfoMessage<'a> {
+    pub key: &'a str,
+    pub value: &'a [u8],
+}
+
+pub struct DropoutMessage {
+    pub duration_ms: u16,
+}
+
+pub struct SyncMessage {
+    pub magic: [u8; 8],
+}
+
+pub struct MultiInfoMessage<'a> {
+    pub is_continued: bool,
+    pub key: &'a str,
+    pub value: &'a [u8],
+}
+
+/// A reassembled multi-info message whose fragments have been concatenated.
+/// Owns its data since the value is built from multiple message payloads.
+#[derive(Clone, Debug)]
+pub struct ReassembledMultiInfoMessage {
+    pub key: String,
+    pub value: Vec<u8>,
+}
+
+pub struct RemoveLoggedMessage {
+    pub msg_id: u16,
+}
+
+pub struct TaggedLoggedStringMessage<'a> {
+    pub log_level: u8,
+    pub tag: u16,
+    pub timestamp: u64,
+    pub logged_message: &'a str,
+}
+
+#[derive(Debug)]
+pub enum ParameterDefaultMessage<'a> {
+    Float(&'a str, f32, u8),
+    Int32(&'a str, i32, u8),
 }
 
 impl<'a> LoggedStringMessage<'a> {

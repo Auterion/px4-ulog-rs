@@ -130,6 +130,24 @@ impl ULogBuilder {
         self.write_message(b'I', &payload)
     }
 
+    /// Write a MultiInfo ('M') message.
+    /// `is_continued` indicates whether more fragments follow for this key.
+    pub fn multi_info(
+        &mut self,
+        is_continued: bool,
+        key_type: &str,
+        key_name: &str,
+        value: &[u8],
+    ) -> &mut Self {
+        let key = format!("{}[{}] {}", key_type, value.len(), key_name);
+        let mut payload = Vec::new();
+        payload.push(if is_continued { 1u8 } else { 0u8 });
+        payload.push(key.len() as u8);
+        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(value);
+        self.write_message(b'M', &payload)
+    }
+
     /// Write a Dropout ('O') message.
     pub fn dropout(&mut self, duration_ms: u16) -> &mut Self {
         self.write_message(b'O', &duration_ms.to_le_bytes())
