@@ -72,7 +72,7 @@ pub fn as_u16_le(arr: &[u8]) -> u16 {
 /// assert_eq!(unpack::as_f32_le(&arr), 0.0);
 /// ```
 pub fn as_f32_le(arr: &[u8]) -> f32 {
-        unsafe { *(&as_u32_le(arr) as *const u32 as *const f32) }
+        f32::from_bits(as_u32_le(arr))
 }
 
 /// Convert a u8 slice to a string

@@ -129,9 +129,9 @@ impl<'c> LogParser<'c> {
             let leftover_bytes_used = self.parse_single_entry(leftover.as_slice())?;
             std::mem::swap(&mut leftover, &mut self.leftover);
             if leftover_bytes_used == 0 {
-                // If we have no error and nothing to read within this much data, this implementation has issues.
+                // Not enough data yet to parse a complete entry.
+                // Keep the newly appended bytes in leftover (don't truncate them).
                 assert!(self.leftover.len() < MAX_MESSAGE_SIZE);
-                self.leftover.truncate(original_leftover_len);
                 return Ok(());
             }
             if leftover_bytes_used < original_leftover_len {
@@ -200,7 +200,7 @@ impl<'c> LogParser<'c> {
         let msg_size = unpack::as_u16_le(&buf[0..2]);
         let msg_type = buf[2];
         let consumed_len = msg_size as usize + 3;
-        if buf.len() <= consumed_len {
+        if buf.len() < consumed_len {
             return Ok(0);
         }
         let msg = model::ULogMessage::new(msg_type, &buf[3..(3 + msg_size as usize)]);
@@ -358,7 +358,7 @@ impl<'c> LogParser<'c> {
                     ));
                 }
                 let msg_id = unpack::as_u16_le(&msg.data[0..2]);
-                let (ref mut flattened_format, ref mut multi_id, ref mut last_timestamp) = self
+                let (ref mut flattened_format, ref mut multi_id, _) = self
                     .flattened_format
                     .get_message_description(msg_id)
                     .ok_or_else(|| {
@@ -377,24 +377,13 @@ impl<'c> LogParser<'c> {
                         ),
                     ));
                 }
-                let timestamp_field = flattened_format.timestamp_field.as_ref().ok_or_else(|| UlogParseError::new(
-                    ParseErrorType::Other,
-                    &format!("Message does not have a timestamp field {}", flattened_format.message_name),
-                ))?;
-                let current_timestamp = timestamp_field.parse_timestamp(msg.data());
-                if *last_timestamp < current_timestamp {
-                    *last_timestamp = current_timestamp;
-                    if let Some(cb) = &mut self.data_message_callback {
-                        cb(&DataMessage {
-                            msg_id,
-                            multi_id: multi_id.clone(),
-                            data: msg.data(),
-                            flattened_format,
-                        });
-                    }
-                } else {
-                    // TODO: have some failure state for this.
-                    // Encountered bad timestamp, ignore
+                if let Some(cb) = &mut self.data_message_callback {
+                    cb(&DataMessage {
+                        msg_id,
+                        multi_id: multi_id.clone(),
+                        data: msg.data(),
+                        flattened_format,
+                    });
                 }
             }
 

@@ -100,17 +100,7 @@ fn test_cross_validate_message_counts_full_parser() {
         }
     }
 
-    // pyulog reports 64542 total — we may differ due to timestamp filtering bug
-    // Document the difference if any
-    let pyulog_total = 64542usize;
-    if total_parsed != pyulog_total {
-        eprintln!(
-            "CROSS-VALIDATION: total parsed={}, pyulog={}, diff={} (likely timestamp filtering)",
-            total_parsed,
-            pyulog_total,
-            (pyulog_total as i64 - total_parsed as i64).abs()
-        );
-    }
+    assert_eq!(total_parsed, 64542, "Total data messages should match pyulog");
 }
 
 #[test]
