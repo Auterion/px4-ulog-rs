@@ -770,6 +770,7 @@ impl MaybeRepeatedType {
 
 #[derive(Debug)]
 struct FlagBits {
+    #[allow(dead_code)]
     compat_flags: [u8; 8],
     incompat_flags: [u8; 8],
     appended_offsets: [u64; 3],

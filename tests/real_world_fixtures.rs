@@ -7,8 +7,6 @@ use px4_ulog::full_parser;
 use px4_ulog::stream_parser::file_reader::{
     read_file_with_simple_callback, Message, SimpleCallbackResult,
 };
-use px4_ulog::stream_parser::model::MultiId;
-
 fn fixture_path(name: &str) -> String {
     format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name)
 }

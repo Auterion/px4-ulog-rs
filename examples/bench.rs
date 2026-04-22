@@ -1,5 +1,5 @@
 use std::time::Instant;
-use px4_ulog::stream_parser::file_reader::{read_file_with_simple_callback, Message, SimpleCallbackResult};
+use px4_ulog::stream_parser::file_reader::{read_file_with_simple_callback, SimpleCallbackResult};
 
 fn bench_file(path: &str) -> (usize, f64, f64) {
     let file_size = std::fs::metadata(path).unwrap().len() as usize;

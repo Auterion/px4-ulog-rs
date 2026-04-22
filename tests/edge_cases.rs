@@ -99,7 +99,7 @@ fn test_max_length_message_header() {
 
 #[test]
 fn test_wrong_magic_bytes() {
-    let mut bytes = vec![0x00; 16]; // all zeros, wrong magic
+    let bytes = vec![0x00; 16]; // all zeros, wrong magic
     let result = parse_bytes(&bytes);
     assert!(result.is_err(), "Wrong magic should error");
 }

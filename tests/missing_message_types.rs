@@ -44,6 +44,7 @@ fn fixture_path(name: &str) -> String {
 
 /// Helper: parse raw bytes through LogParser with all callbacks, collecting Messages.
 /// This uses consume_bytes directly so we can test synthetic byte streams without files.
+#[allow(dead_code)]
 fn parse_bytes_collecting(bytes: &[u8]) -> Vec<String> {
     // We collect a string tag for each message received so we can assert on message types.
     // Once the Message enum has new variants, the match arms below will compile.
@@ -718,7 +719,7 @@ fn test_tagged_logged_string_synthetic() {
                     tlm.logged_message.to_string(),
                 ));
             }
-            _ => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -765,7 +766,7 @@ fn test_tagged_logged_string_different_levels() {
             Message::TaggedLoggedMessage(tlm) => {
                 tagged_levels.push(tlm.log_level);
             }
-            _ => {}
+            Message::ParameterDefaultMessage(_) => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -823,7 +824,6 @@ fn test_parameter_default_i32_synthetic() {
                     param_defaults.push((*default_types, name.to_string(), *val));
                 }
             }
-            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -872,7 +872,6 @@ fn test_parameter_default_current_config() {
                     param_defaults.push((*default_types, name.to_string()));
                 }
             }
-            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
@@ -937,7 +936,6 @@ fn test_all_ignored_types_in_one_stream() {
             Message::RemoveLoggedMessage(_) => remove_count += 1,
             Message::TaggedLoggedMessage(_) => tagged_count += 1,
             Message::ParameterDefaultMessage(_) => param_default_count += 1,
-            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })

@@ -23,6 +23,7 @@ fn parse_and_collect_data(bytes: &[u8]) -> Vec<(u16, Vec<u8>)> {
 }
 
 /// Helper: parse bytes and collect logged strings.
+#[allow(dead_code)]
 fn parse_and_collect_strings(bytes: &[u8]) -> Vec<(u8, u64, String)> {
     let mut results = Vec::new();
     let mut cb = |msg: &LoggedStringMessage| {
@@ -35,6 +36,7 @@ fn parse_and_collect_strings(bytes: &[u8]) -> Vec<(u8, u64, String)> {
 }
 
 /// Helper: parse bytes and collect parameters.
+#[allow(dead_code)]
 fn parse_and_collect_params(bytes: &[u8]) -> Vec<(String, String)> {
     let mut results = Vec::new();
     let mut cb = |msg: &ParameterMessage| match msg {
