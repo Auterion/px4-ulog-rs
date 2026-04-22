@@ -28,8 +28,11 @@ enum ParseStatus {
 #[derive(Default)]
 pub struct DataFormat {
     flattened_format: HashMap<String, FlattenedFormat>,
-    // msg_id -> (flattened_format, multi_id, last_timestamp)
-    registered_messages: HashMap<u16, (FlattenedFormat, MultiId, u64)>,
+    // msg_id -> (flattened_format, multi_id, last_timestamp). Indexed directly
+    // by msg_id: hot lookup on every Data message is a bounds check + pointer
+    // deref, no hashing. The vec grows on-demand; real ULog writers allocate
+    // msg_ids densely from 0.
+    registered_messages: Vec<Option<(FlattenedFormat, MultiId, u64)>>,
 }
 
 impl DataFormat {
@@ -46,39 +49,41 @@ impl DataFormat {
         message_name: &str,
         multi_id: u8,
     ) -> Result<(), UlogParseError> {
-        if let Some(flattened_message) = self.flattened_format.get(message_name) {
-            if let Some(preexisting_message) = self.registered_messages.insert(
-                msg_id,
-                (flattened_message.clone(), MultiId::new(multi_id), 0),
-            ) {
-                return Err(UlogParseError::new(
-                    ParseErrorType::Other,
-                    &format!(
-                        "duplicate registration for msg_id {:?}, initial one:\n{:#?}\nlater one:\n{:#?}",
-                        msg_id,
-                        preexisting_message,
-                        flattened_message
-                    ),
-                ));
-            }
-            Ok(())
-        } else {
-            Err(UlogParseError::new(
+        let Some(flattened_message) = self.flattened_format.get(message_name) else {
+            return Err(UlogParseError::new(
                 ParseErrorType::Other,
                 &format!(
                     "Could not find format definition for message {}",
                     message_name
                 ),
-            ))
+            ));
+        };
+
+        let idx = msg_id as usize;
+        if idx >= self.registered_messages.len() {
+            self.registered_messages.resize(idx + 1, None);
         }
+        if let Some(preexisting_message) = self.registered_messages[idx].take() {
+            return Err(UlogParseError::new(
+                ParseErrorType::Other,
+                &format!(
+                    "duplicate registration for msg_id {:?}, initial one:\n{:#?}\nlater one:\n{:#?}",
+                    msg_id, preexisting_message, flattened_message
+                ),
+            ));
+        }
+        self.registered_messages[idx] =
+            Some((flattened_message.clone(), MultiId::new(multi_id), 0));
+        Ok(())
     }
 
-    // This should actually never return None
     pub fn get_message_description(
         &mut self,
         msg_id: u16,
     ) -> Option<&mut (FlattenedFormat, MultiId, u64)> {
-        self.registered_messages.get_mut(&msg_id)
+        self.registered_messages
+            .get_mut(msg_id as usize)
+            .and_then(|slot| slot.as_mut())
     }
 }
 
@@ -265,6 +270,24 @@ impl<'c> LogParser<'c> {
         Ok(())
     }
 
+    /// Parameter and ParameterDefault share identical stage-tracking logic:
+    /// reject in Beginning, upgrade AfterHeader to InDefinitions, and classify
+    /// the surfaced value as Definitions- or Data-stage.
+    fn log_stage_for_parameter(&mut self, kind: &str) -> Result<model::LogStage, UlogParseError> {
+        match self.status {
+            ParseStatus::Beginning => Err(UlogParseError::new(
+                ParseErrorType::Other,
+                &format!("{} message encountered bad status", kind),
+            )),
+            ParseStatus::AfterHeader => {
+                self.status = ParseStatus::InDefinitions;
+                Ok(model::LogStage::Definitions)
+            }
+            ParseStatus::InDefinitions => Ok(model::LogStage::Definitions),
+            ParseStatus::InData => Ok(model::LogStage::Data),
+        }
+    }
+
     // Parses a header or a message.
     fn parse_single_entry(&mut self, buf: &[u8]) -> Result<usize, UlogParseError> {
         assert!(self.leftover.is_empty());
@@ -363,20 +386,7 @@ impl<'c> LogParser<'c> {
                     .register_msg_id(msg_id, message_name, multi_id)?;
             }
             model::MessageType::Parameter => {
-                let log_stage = match self.status {
-                    ParseStatus::Beginning => {
-                        return Err(UlogParseError::new(
-                            ParseErrorType::Other,
-                            "parameter message encountered bad status",
-                        ));
-                    }
-                    ParseStatus::AfterHeader => {
-                        self.status = ParseStatus::InDefinitions;
-                        model::LogStage::Definitions
-                    }
-                    ParseStatus::InDefinitions => model::LogStage::Definitions,
-                    ParseStatus::InData => model::LogStage::Data,
-                };
+                let log_stage = self.log_stage_for_parameter("parameter")?;
                 let key_len = msg.data[0];
                 let value_bytes = &msg.data()[(1 + key_len as usize)..];
                 if value_bytes.len() != 4 {
@@ -635,20 +645,7 @@ impl<'c> LogParser<'c> {
             }
 
             model::MessageType::ParameterDefault => {
-                let _log_stage = match self.status {
-                    ParseStatus::Beginning => {
-                        return Err(UlogParseError::new(
-                            ParseErrorType::Other,
-                            "parameter default message encountered bad status",
-                        ));
-                    }
-                    ParseStatus::AfterHeader => {
-                        self.status = ParseStatus::InDefinitions;
-                        model::LogStage::Definitions
-                    }
-                    ParseStatus::InDefinitions => model::LogStage::Definitions,
-                    ParseStatus::InData => model::LogStage::Data,
-                };
+                let _log_stage = self.log_stage_for_parameter("parameter default")?;
                 if msg.data.len() < 2 {
                     return Err(UlogParseError::new(
                         ParseErrorType::Other,
@@ -864,6 +861,27 @@ fn parse_format(message: &model::ULogMessage) -> Result<Format, UlogParseError> 
     Ok(result)
 }
 
+/// Map a primitive `DataType` to its `FlattenedFieldType` and byte width.
+/// Returns `None` for `DataType::Message` (handled as a nested format).
+fn primitive_layout(data_type: &DataType) -> Option<(FlattenedFieldType, usize)> {
+    use DataType::*;
+    Some(match data_type {
+        Int8 => (FlattenedFieldType::Int8, 1),
+        UInt8 => (FlattenedFieldType::UInt8, 1),
+        Int16 => (FlattenedFieldType::Int16, 2),
+        UInt16 => (FlattenedFieldType::UInt16, 2),
+        Int32 => (FlattenedFieldType::Int32, 4),
+        UInt32 => (FlattenedFieldType::UInt32, 4),
+        Int64 => (FlattenedFieldType::Int64, 8),
+        UInt64 => (FlattenedFieldType::UInt64, 8),
+        Float => (FlattenedFieldType::Float, 4),
+        Double => (FlattenedFieldType::Double, 8),
+        Bool => (FlattenedFieldType::Bool, 1),
+        Char => (FlattenedFieldType::Char, 1),
+        Message(_) => return None,
+    })
+}
+
 fn flatten_data_type(
     data_type: &DataType,
     qualified_field_name: String,
@@ -872,117 +890,26 @@ fn flatten_data_type(
     already_added_messages: &mut HashSet<String>,
     list_to_append_to: &mut Vec<FlattenedField>,
 ) -> Result<usize, UlogParseError> {
-    match data_type {
-        DataType::Int8 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Int8,
-                offset: offset as u16,
-            });
-            offset += 1;
-        }
-        DataType::UInt8 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::UInt8,
-                offset: offset as u16,
-            });
-            offset += 1;
-        }
-        DataType::Int16 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Int16,
-                offset: offset as u16,
-            });
-            offset += 2;
-        }
-        DataType::UInt16 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::UInt16,
-                offset: offset as u16,
-            });
-            offset += 2;
-        }
-        DataType::Int32 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Int32,
-                offset: offset as u16,
-            });
-            offset += 4;
-        }
-        DataType::UInt32 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::UInt32,
-                offset: offset as u16,
-            });
-            offset += 4;
-        }
-        DataType::Int64 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Int64,
-                offset: offset as u16,
-            });
-            offset += 8;
-        }
-        DataType::UInt64 => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::UInt64,
-                offset: offset as u16,
-            });
-            offset += 8;
-        }
-        DataType::Float => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Float,
-                offset: offset as u16,
-            });
-            offset += 4;
-        }
-        DataType::Double => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Double,
-                offset: offset as u16,
-            });
-            offset += 8;
-        }
-        DataType::Bool => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Bool,
-                offset: offset as u16,
-            });
-            offset += 1;
-        }
-        DataType::Char => {
-            list_to_append_to.push(FlattenedField {
-                flattened_field_name: qualified_field_name,
-                field_type: FlattenedFieldType::Char,
-                offset: offset as u16,
-            });
-            offset += 1;
-        }
-        DataType::Message(message_name) => {
-            offset = add_flattened_message(
-                message_name,
-                offset,
-                message_formats,
-                qualified_field_name + ".",
-                already_added_messages,
-                list_to_append_to,
-            )?;
-            already_added_messages.remove(message_name);
-        }
+    if let Some((field_type, size)) = primitive_layout(data_type) {
+        list_to_append_to.push(FlattenedField {
+            flattened_field_name: qualified_field_name,
+            field_type,
+            offset: offset as u16,
+        });
+        offset += size;
+    } else if let DataType::Message(message_name) = data_type {
+        offset = add_flattened_message(
+            message_name,
+            offset,
+            message_formats,
+            qualified_field_name + ".",
+            already_added_messages,
+            list_to_append_to,
+        )?;
+        already_added_messages.remove(message_name);
     }
-    let u16_offset = offset as u16;
-    if u16_offset as usize != offset {
+
+    if offset > u16::MAX as usize {
         return Err(UlogParseError::new(
             ParseErrorType::Other,
             "offset overflow",

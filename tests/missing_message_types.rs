@@ -213,12 +213,11 @@ fn parameter_default_surfaces_system_and_current_config_flags() {
     builder.parameter_default_i32(0x02, "MC_PITCHRATE_P", 150);
 
     let defaults = collect_from_bytes(&builder.build(), "param_default", |msg| {
-        if let Message::ParameterDefaultMessage(pd) = msg {
-            if let model::ParameterDefaultMessage::Int32(name, val, flags) = pd {
-                return Some((*flags, name.to_string(), *val));
-            }
+        if let Message::ParameterDefaultMessage(model::ParameterDefaultMessage::Int32(name, val, flags)) = msg {
+            Some((*flags, name.to_string(), *val))
+        } else {
+            None
         }
-        None
     });
 
     assert_eq!(
