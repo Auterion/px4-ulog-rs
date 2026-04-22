@@ -1,5 +1,6 @@
 use super::model_helper::{FlattenedFieldTypeMatcher, LittleEndianParser};
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq)]
@@ -166,6 +167,23 @@ pub enum ParseErrorType {
     InvalidFile,
     Other,
 }
+
+impl fmt::Display for ParseErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseErrorType::InvalidFile => write!(f, "invalid file"),
+            ParseErrorType::Other => write!(f, "parse error"),
+        }
+    }
+}
+
+impl fmt::Display for UlogParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.error_type, self.description)
+    }
+}
+
+impl std::error::Error for UlogParseError {}
 
 #[derive(Clone, Debug)]
 pub struct FlattenedFormat {

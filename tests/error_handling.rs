@@ -32,31 +32,31 @@ fn parse_bytes(bytes: &[u8]) -> Result<(), UlogParseError> {
 //
 // TODO: Uncomment once UlogParseError implements std::error::Error and Display.
 
-// #[test]
-// fn error_implements_std_error_trait() {
-//     // UlogParseError should be usable as Box<dyn std::error::Error>.
-//     let err = UlogParseError::new(ParseErrorType::InvalidFile, "bad header");
-//     let boxed: Box<dyn std::error::Error> = Box::new(err);
-//     // The error trait requires Display, so this should work:
-//     let msg = format!("{}", boxed);
-//     assert!(!msg.is_empty(), "Display output should not be empty");
-// }
+#[test]
+fn error_implements_std_error_trait() {
+    // UlogParseError should be usable as Box<dyn std::error::Error>.
+    let err = UlogParseError::new(ParseErrorType::InvalidFile, "bad header");
+    let boxed: Box<dyn std::error::Error> = Box::new(err);
+    // The error trait requires Display, so this should work:
+    let msg = format!("{}", boxed);
+    assert!(!msg.is_empty(), "Display output should not be empty");
+}
 
-// #[test]
-// fn error_works_with_question_mark_operator() {
-//     // Simulates using ? in a function returning Box<dyn std::error::Error>.
-//     fn inner() -> Result<(), Box<dyn std::error::Error>> {
-//         let bytes = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00,
-//                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-//         let mut noop = |_: &DataMessage| {};
-//         let mut parser = LogParser::default();
-//         parser.set_data_message_callback(&mut noop);
-//         parser.consume_bytes(&bytes)?;
-//         Ok(())
-//     }
-//     let result = inner();
-//     assert!(result.is_err(), "Invalid header should produce an error");
-// }
+#[test]
+fn error_works_with_question_mark_operator() {
+    // Simulates using ? in a function returning Box<dyn std::error::Error>.
+    fn inner() -> Result<(), Box<dyn std::error::Error>> {
+        let bytes = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00,
+                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let mut noop = |_: &DataMessage| {};
+        let mut parser = LogParser::default();
+        parser.set_data_message_callback(&mut noop);
+        parser.consume_bytes(&bytes)?;
+        Ok(())
+    }
+    let result = inner();
+    assert!(result.is_err(), "Invalid header should produce an error");
+}
 
 // =============================================================================
 // 2. UlogParseError should implement Display with meaningful messages
@@ -64,21 +64,21 @@ fn parse_bytes(bytes: &[u8]) -> Result<(), UlogParseError> {
 //
 // TODO: Uncomment once UlogParseError implements Display.
 
-// #[test]
-// fn display_for_invalid_header_contains_context() {
-//     let err = UlogParseError::new(ParseErrorType::InvalidFile, "The header does not match");
-//     let msg = format!("{}", err);
-//     assert!(msg.contains("header") || msg.contains("invalid") || msg.contains("Header"),
-//             "Display should mention the header problem, got: {}", msg);
-// }
+#[test]
+fn display_for_invalid_header_contains_context() {
+    let err = UlogParseError::new(ParseErrorType::InvalidFile, "The header does not match");
+    let msg = format!("{}", err);
+    assert!(msg.contains("header") || msg.contains("invalid") || msg.contains("Header"),
+            "Display should mention the header problem, got: {}", msg);
+}
 
-// #[test]
-// fn display_for_other_error_contains_description() {
-//     let err = UlogParseError::new(ParseErrorType::Other, "duplicate registration for msg_id 42");
-//     let msg = format!("{}", err);
-//     assert!(msg.contains("42"),
-//             "Display should include the description context, got: {}", msg);
-// }
+#[test]
+fn display_for_other_error_contains_description() {
+    let err = UlogParseError::new(ParseErrorType::Other, "duplicate registration for msg_id 42");
+    let msg = format!("{}", err);
+    assert!(msg.contains("42"),
+            "Display should include the description context, got: {}", msg);
+}
 
 // =============================================================================
 // 3. UlogParseError implements Debug (already derived, just verify)
