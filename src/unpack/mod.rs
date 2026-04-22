@@ -1,87 +1,73 @@
-use std::io::{Error, ErrorKind, Result};
-use std::iter::*;
+//! Little-endian byte-slice unpacking helpers.
+//!
+//! Thin wrappers over stdlib primitives. Callers pass sub-slices taken from
+//! the raw ULog byte stream; these helpers handle the slice-to-array conversion
+//! so call sites stay compact. Input length is expected to match the target
+//! type's byte width; wrong lengths panic (always a parser bug).
 
-/// Convert a array of eight u8 elements into a u64
-/// Assumes little endianness.
+use std::io::{Error, ErrorKind, Result};
+
+/// Read a little-endian `u64` from an 8-byte slice.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 8] = [7, 6, 5, 4, 3, 2, 1, 0];
-/// assert_eq!(unpack::as_u64_le(&arr), 283686952306183);
+/// assert_eq!(unpack::as_u64_le(&[7, 6, 5, 4, 3, 2, 1, 0]), 283686952306183);
 /// ```
 pub fn as_u64_le(arr: &[u8]) -> u64 {
-    arr.iter()
-        .enumerate()
-        .map(|(i, v)| (*v as u64) << (8 * i))
-        .sum()
+    u64::from_le_bytes(arr.try_into().expect("as_u64_le expects 8 bytes"))
 }
 
-/// Convert a array of four u8 elements into a u32
-/// Assumes little endianness.
+/// Read a little-endian `u32` from a 4-byte slice.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 4] = [2, 1, 0, 0];
-/// assert_eq!(unpack::as_u32_le(&arr), 258);
+/// assert_eq!(unpack::as_u32_le(&[2, 1, 0, 0]), 258);
 /// ```
 pub fn as_u32_le(arr: &[u8]) -> u32 {
-    arr.iter()
-        .enumerate()
-        .map(|(i, v)| (*v as u32) << (8 * i))
-        .sum()
+    u32::from_le_bytes(arr.try_into().expect("as_u32_le expects 4 bytes"))
 }
 
-/// Convert a array of four u8 elements into a i32
-/// Assumes little endianness.
+/// Read a little-endian `i32` from a 4-byte slice.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 4] = [1, 0, 0, 255];
-/// assert_eq!(unpack::as_i32_le(&arr), -16777215);
+/// assert_eq!(unpack::as_i32_le(&[1, 0, 0, 255]), -16777215);
 /// ```
 pub fn as_i32_le(arr: &[u8]) -> i32 {
-    as_u32_le(arr) as i32
+    i32::from_le_bytes(arr.try_into().expect("as_i32_le expects 4 bytes"))
 }
 
-/// Convert a array of two u8 elements into a u16
-/// Assumes little endianness.
+/// Read a little-endian `u16` from a 2-byte slice.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 2] = [0, 2];
-/// assert_eq!(unpack::as_u16_le(&arr), 512);
+/// assert_eq!(unpack::as_u16_le(&[0, 2]), 512);
 /// ```
 pub fn as_u16_le(arr: &[u8]) -> u16 {
-    arr.iter()
-        .enumerate()
-        .map(|(i, v)| (*v as u16) << (8 * i))
-        .sum()
+    u16::from_le_bytes(arr.try_into().expect("as_u16_le expects 2 bytes"))
 }
 
-/// Convert a array of four u8 elements into a f32
-/// Assumes little endianness.
+/// Read a little-endian `f32` from a 4-byte slice.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 4] = [0, 0, 0, 0];
-/// assert_eq!(unpack::as_f32_le(&arr), 0.0);
+/// assert_eq!(unpack::as_f32_le(&[0, 0, 0, 0]), 0.0);
 /// ```
 pub fn as_f32_le(arr: &[u8]) -> f32 {
-    f32::from_bits(as_u32_le(arr))
+    f32::from_le_bytes(arr.try_into().expect("as_f32_le expects 4 bytes"))
 }
 
-/// Convert a u8 slice to a string
+/// Interpret a byte slice as UTF-8. Returns an I/O error on invalid UTF-8.
 ///
 /// # Examples
 /// ```
 /// use px4_ulog::unpack;
-/// let arr: [u8; 5] = [72, 101, 108, 108, 111];
-/// assert_eq!(unpack::as_str(&arr).unwrap(), "Hello");
+/// assert_eq!(unpack::as_str(&[72, 101, 108, 108, 111]).unwrap(), "Hello");
 /// ```
 pub fn as_str(arr: &[u8]) -> Result<&str> {
     std::str::from_utf8(arr).map_err(|_| Error::new(ErrorKind::Other, "data is not a string"))
