@@ -6,7 +6,10 @@ use px4_ulog::unpack;
 
 #[test]
 fn as_u64_le_reads_little_endian() {
-    assert_eq!(unpack::as_u64_le(&[7, 6, 5, 4, 3, 2, 1, 0]), 283686952306183u64);
+    assert_eq!(
+        unpack::as_u64_le(&[7, 6, 5, 4, 3, 2, 1, 0]),
+        283686952306183u64
+    );
 }
 
 #[test]

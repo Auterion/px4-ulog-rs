@@ -1,7 +1,6 @@
-//! Priority 6: Cross-validation tests against pyulog reference output.
-//!
-//! Expected values are hard-coded from pyulog output on the same fixture files.
-//! This ensures px4-ulog-rs produces identical results to the reference implementation.
+//! Cross-validation tests against pyulog reference output. Expected values
+//! are hard-coded from pyulog on the same fixture files, so this crate's
+//! output is asserted to match the reference implementation exactly.
 
 use px4_ulog::full_parser;
 use px4_ulog::full_parser::SomeVec;
@@ -32,7 +31,7 @@ fn fixture_path(name: &str) -> String {
 }
 
 // =============================================================================
-// P6-1: Data point counts per topic (from pyulog)
+// Data point counts per topic (from pyulog)
 // =============================================================================
 
 /// Reference data from pyulog:
@@ -140,7 +139,7 @@ fn test_cross_validate_message_counts_stream_parser() {
 }
 
 // =============================================================================
-// P6-2: Parameter validation
+// Parameter validation
 // =============================================================================
 
 #[test]
@@ -180,7 +179,7 @@ fn test_cross_validate_parameters() {
 }
 
 // =============================================================================
-// P6-3: Logged string messages
+// Logged string messages
 // =============================================================================
 
 #[test]
@@ -214,7 +213,7 @@ fn test_cross_validate_logged_messages() {
 }
 
 // =============================================================================
-// P6-4: Start timestamp
+// Start timestamp
 // =============================================================================
 
 #[test]
@@ -234,7 +233,7 @@ fn test_cross_validate_start_timestamp() {
 }
 
 // =============================================================================
-// P6-5: Topic list from seek parser
+// Topic list from seek parser
 // =============================================================================
 
 #[test]
@@ -255,7 +254,7 @@ fn test_cross_validate_topic_list() {
 }
 
 // =============================================================================
-// P6-6: GPS data values (seek parser cross-check)
+// GPS data values (seek parser cross-check)
 // =============================================================================
 
 #[test]
@@ -275,7 +274,7 @@ fn test_cross_validate_gps_data_count() {
 }
 
 // =============================================================================
-// P6-7: ESC status nested message
+// ESC status nested message
 // =============================================================================
 
 #[test]

@@ -219,7 +219,9 @@ fn corrupt_fixture(name: &str) -> String {
     format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name)
 }
 
-fn parse_file_with_streaming(path: &str) -> Result<usize, px4_ulog::stream_parser::model::UlogParseError> {
+fn parse_file_with_streaming(
+    path: &str,
+) -> Result<usize, px4_ulog::stream_parser::model::UlogParseError> {
     use std::io::Read;
     let mut f = std::fs::File::open(path).expect("open fixture");
     let mut parser = LogParser::default();

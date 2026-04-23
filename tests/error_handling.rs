@@ -44,8 +44,16 @@ fn debug_and_display_carry_context() {
     let err = UlogParseError::new(ParseErrorType::InvalidFile, "bad header");
     let debug = format!("{:?}", err);
     let display = format!("{}", err);
-    assert!(debug.contains("UlogParseError"), "Debug should name the type, got: {}", debug);
-    assert!(display.contains("bad header"), "Display should carry description, got: {}", display);
+    assert!(
+        debug.contains("UlogParseError"),
+        "Debug should name the type, got: {}",
+        debug
+    );
+    assert!(
+        display.contains("bad header"),
+        "Display should carry description, got: {}",
+        display
+    );
 }
 
 // =============================================================================
@@ -73,7 +81,11 @@ fn unknown_incompat_flag_bit_is_rejected() {
     builder.flag_bits_with_incompat(&incompat);
     let err = parse_bytes(&builder.build()).unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("incompatible") || msg.contains("flag"), "got: {}", msg);
+    assert!(
+        msg.contains("incompatible") || msg.contains("flag"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -102,7 +114,11 @@ fn duplicate_format_name_is_rejected() {
     let err = parse_bytes(&builder.build()).unwrap_err();
     let msg = format!("{:?}", err);
     assert!(msg.to_lowercase().contains("duplicate"), "got: {}", msg);
-    assert!(msg.contains("accel"), "should name offending format, got: {}", msg);
+    assert!(
+        msg.contains("accel"),
+        "should name offending format, got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -117,7 +133,11 @@ fn duplicate_msg_id_registration_is_rejected() {
 
     let err = parse_bytes(&builder.build()).unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("7") || msg.to_lowercase().contains("duplicate"), "got: {}", msg);
+    assert!(
+        msg.contains("7") || msg.to_lowercase().contains("duplicate"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -131,7 +151,11 @@ fn data_for_unregistered_msg_id_is_rejected() {
 
     let err = parse_bytes(&builder.build()).unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("42") || msg.contains("unregistered"), "got: {}", msg);
+    assert!(
+        msg.contains("42") || msg.contains("unregistered"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -145,7 +169,11 @@ fn data_message_size_mismatch_is_rejected() {
 
     let err = parse_bytes(&builder.build()).unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.to_lowercase().contains("size") || msg.contains("wrong"), "got: {}", msg);
+    assert!(
+        msg.to_lowercase().contains("size") || msg.contains("wrong"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -171,8 +199,8 @@ fn malformed_format_strings_are_rejected() {
     // Covers the three distinct malformations in one parameterised check:
     // missing colon separator, empty type name, missing space between type and field.
     let cases: &[&[u8]] = &[
-        b"no_colon_here",          // missing colon
-        b":just_a_colon_no_name",  // empty name before colon
+        b"no_colon_here",             // missing colon
+        b":just_a_colon_no_name",     // empty name before colon
         b"topic_x:uint64_ttimestamp", // no space between type and field name
     ];
     for bad in cases {
@@ -199,7 +227,11 @@ fn duplicate_field_names_in_format_is_rejected() {
 
     let err = parse_bytes(&bytes).unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.to_lowercase().contains("duplicate") || msg.contains("field"), "got: {}", msg);
+    assert!(
+        msg.to_lowercase().contains("duplicate") || msg.contains("field"),
+        "got: {}",
+        msg
+    );
 }
 
 // =============================================================================
@@ -214,7 +246,10 @@ fn read_file_with_simple_callback_returns_error_for_bad_file() {
     use std::io::Write;
 
     let path = std::env::temp_dir().join("px4_ulog_error_handling_simple_bad.ulg");
-    std::fs::File::create(&path).unwrap().write_all(&[0xFF; 16]).unwrap();
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(&[0xFF; 16])
+        .unwrap();
 
     let mut noop = |_: &Message| SimpleCallbackResult::KeepReading;
     let result = read_file_with_simple_callback(path.to_str().unwrap(), &mut noop);
@@ -228,7 +263,10 @@ fn full_parser_read_file_returns_error_for_bad_file() {
     use std::io::Write;
 
     let path = std::env::temp_dir().join("px4_ulog_error_handling_full_bad.ulg");
-    std::fs::File::create(&path).unwrap().write_all(&[0xFF; 16]).unwrap();
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(&[0xFF; 16])
+        .unwrap();
 
     assert!(px4_ulog::full_parser::read_file(path.to_str().unwrap()).is_err());
 

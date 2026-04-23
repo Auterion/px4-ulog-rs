@@ -1,6 +1,5 @@
-//! Priority 4: Edge case and corruption tests.
-//!
-//! These verify the parser does not panic or hang on malformed input.
+//! Edge case and corruption tests. Verify the parser does not panic or hang
+//! on malformed input.
 
 mod helpers;
 
@@ -82,7 +81,7 @@ fn test_zero_length_message() {
     bytes.extend_from_slice(&[0u8; 10]);
     let result = parse_bytes(&bytes);
     // Should not panic or infinite loop
-    // May error (flag bits too small) — that's fine
+    // May error (flag bits too small), that's fine
     let _ = result;
 }
 
@@ -92,7 +91,7 @@ fn test_max_length_message_header() {
     // Message claiming max size (65535 bytes) but no body
     bytes.extend_from_slice(&0xFFFFu16.to_le_bytes());
     bytes.push(b'F');
-    // Don't provide the body — should stash as leftover
+    // Don't provide the body, should stash as leftover
     let result = parse_bytes(&bytes);
     assert!(
         result.is_ok(),
@@ -155,7 +154,7 @@ fn test_data_message_before_flag_bits() {
     let mut bytes = builder.build();
     bytes.push(0x00); // trailing byte
     let result = parse_bytes(&bytes);
-    // Should error — data before definitions
+    // Should error, data before definitions
     assert!(result.is_err(), "Data before flag_bits should error");
 }
 
@@ -272,7 +271,7 @@ fn test_format_empty_fields() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    // Empty fields list — should not panic
+    // Empty fields list, should not panic
     let _ = result;
 }
 
@@ -352,7 +351,7 @@ fn test_not_a_log_file_fixture() {
         env!("CARGO_MANIFEST_DIR")
     );
     let bytes = std::fs::read(&path).unwrap();
-    // Empty file (0 bytes) — should not error, just nothing to parse
+    // Empty file (0 bytes), should not error, just nothing to parse
     if bytes.is_empty() {
         let result = parse_bytes(&bytes);
         assert!(result.is_ok(), "Empty file should not error");

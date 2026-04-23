@@ -1,13 +1,6 @@
-//! Integration tests for memory-mapped / byte-slice based parsing.
-//!
-//! These tests validate that ULog data loaded entirely into memory (as would
-//! happen with mmap) can be parsed correctly through the existing and planned
-//! APIs.
-//!
-//! Tests marked "SHOULD PASS TODAY" exercise the current `consume_bytes` path
-//! with contiguous in-memory data. Tests marked "NEEDS NEW API" document
-//! planned APIs that do not yet exist and are expected to fail until
-//! implemented.
+//! Integration tests for parsing ULog data held entirely in memory (the
+//! shape an mmap'd file takes), exercising the `consume_bytes` path on
+//! contiguous byte slices.
 
 mod helpers;
 
@@ -67,7 +60,7 @@ fn parse_file_counting_data(path: &str) -> usize {
 }
 
 // =============================================================================
-// 1. Parse from byte slice (synthetic) -- SHOULD PASS TODAY
+// Parse from byte slice (synthetic)
 // =============================================================================
 
 #[test]
@@ -112,7 +105,7 @@ fn test_synthetic_multiple_messages_from_byte_slice() {
 }
 
 // =============================================================================
-// 2. Parse entire fixture file in one consume_bytes call -- SHOULD PASS TODAY
+// Parse entire fixture file in one consume_bytes call
 // =============================================================================
 
 #[test]
@@ -162,7 +155,7 @@ fn test_quadrotor_local_single_consume_bytes_call() {
 }
 
 // =============================================================================
-// 3. Byte-slice parsing matches file parsing -- SHOULD PASS TODAY
+// Byte-slice parsing matches file parsing
 // =============================================================================
 
 #[test]
@@ -235,7 +228,7 @@ fn test_all_fixtures_byte_slice_matches_file_parse() {
 }
 
 // =============================================================================
-// 4. Full parser from bytes -- NEEDS NEW API
+// Full parser from bytes -- NEEDS NEW API
 //
 // Currently full_parser::read_file() only accepts a &str file path.
 // These tests document the need for a full_parser::read_bytes(&[u8]) function
@@ -304,23 +297,16 @@ fn test_full_parser_from_bytes_matches_file_parse() {
 }
 
 // =============================================================================
-// 5. Large contiguous buffer performance -- design validation
+// Large contiguous buffer, design validation.
 //
-// When all data is available in a single contiguous buffer (mmap), the parser
-// should NOT need to copy bytes into the leftover buffer. This test verifies
-// that behavior by checking that after a single consume_bytes call with a
-// complete file, leftover is empty (all data was consumed inline).
+// When all data is available in a single contiguous buffer (the mmap case),
+// the parser must not copy bytes into the leftover buffer. After a single
+// consume_bytes call with a complete file, leftover should be empty: every
+// parse_single_entry call succeeded inline, and there are no trailing bytes
+// that don't form a complete message.
 //
-// SHOULD PASS TODAY: consume_bytes with a complete file means every
-// parse_single_entry call succeeds without hitting the leftover path, because
-// there is always enough data available. The only leftover would be trailing
-// bytes that don't form a complete message (none for a valid file).
-//
-// NEEDS NEW API (future): A dedicated parse_contiguous(&[u8]) method could
-// skip the leftover check entirely for better performance. It would:
-//   - Assert leftover is empty at entry
-//   - Never allocate or copy into the leftover Vec
-//   - Return an error if data is incomplete (rather than storing leftovers)
+// A future parse_contiguous(&[u8]) API could skip the leftover path entirely
+// for better performance on the mmap case.
 //
 // TODO: Implement LogParser::parse_contiguous(&mut self, data: &[u8])
 // =============================================================================

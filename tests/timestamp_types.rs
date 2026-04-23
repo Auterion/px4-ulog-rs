@@ -4,11 +4,11 @@
 //! - uint64_t: microseconds (standard, most common)
 //! - uint32_t: microseconds (truncated)
 //! - uint16_t: microseconds (truncated)
-//! - uint8_t:  milliseconds (per spec — different unit!)
+//! - uint8_t:  milliseconds (per spec, different unit!)
 //!
 //! IMPORTANT: The parser does NOT normalize timestamp units. A uint8 timestamp
 //! field stores milliseconds, but `parse_timestamp()` returns the raw value
-//! cast to u64 — the same return type as uint64 timestamps which are in
+//! cast to u64, the same return type as uint64 timestamps which are in
 //! microseconds. Consumers must check `TimestampFieldType` to interpret the
 //! value correctly.
 
@@ -135,7 +135,7 @@ fn test_timestamp_values_preserved() {
     let (_, parsed) = parse_with_timestamp_type("uint16_t", &ts16.to_le_bytes(), &extra);
     assert_eq!(parsed, u16::MAX as u64);
 
-    // uint8: max value (255 milliseconds — note: different unit!)
+    // uint8: max value (255 milliseconds, note: different unit!)
     let ts8: u8 = u8::MAX;
     let (_, parsed) = parse_with_timestamp_type("uint8_t", &[ts8], &extra);
     assert_eq!(parsed, u8::MAX as u64);
@@ -158,7 +158,7 @@ fn test_uint8_timestamp_unit_documentation() {
     // Consumers that assume all timestamps are microseconds will misinterpret
     // uint8 timestamps by a factor of 1000x. For example, a uint8 timestamp
     // of 100 means 100ms (= 100,000 microseconds), but parse_timestamp()
-    // returns 100 — which would be interpreted as 100 microseconds (= 0.1ms).
+    // returns 100, which would be interpreted as 100 microseconds (= 0.1ms).
     //
     // To correctly handle uint8 timestamps, consumers must either:
     // 1. Check `timestamp_field.field_type` and multiply by 1000 if UInt8
@@ -170,7 +170,7 @@ fn test_uint8_timestamp_unit_documentation() {
 
     let (field_type, parsed) = parse_with_timestamp_type("uint8_t", &[ts_val], &extra);
 
-    // The parser returns the raw value — no normalization
+    // The parser returns the raw value, no normalization
     assert_eq!(parsed, 100);
     assert_eq!(field_type, TimestampFieldType::UInt8);
 
@@ -179,7 +179,7 @@ fn test_uint8_timestamp_unit_documentation() {
     assert_ne!(
         parsed, 100_000,
         "Parser should NOT normalize uint8 timestamps (currently). \
-        If this assertion fails, it means normalization was added — update this test."
+        If this assertion fails, it means normalization was added, update this test."
     );
 
     // Demonstrate the correct interpretation for consumers:

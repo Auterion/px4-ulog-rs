@@ -1,6 +1,5 @@
-//! Priority 5: Streaming parser chunk boundary tests.
-//!
-//! Verify that messages split across consume_bytes() calls are handled correctly.
+//! Streaming parser chunk boundary tests. Verify that messages split across
+//! consume_bytes() calls are handled correctly.
 
 mod helpers;
 
@@ -48,7 +47,7 @@ fn build_test_stream(num_messages: usize) -> Vec<u8> {
 }
 
 // =============================================================================
-// P5-1: Header split across chunks
+// Header split across chunks
 // =============================================================================
 
 #[test]
@@ -71,7 +70,7 @@ fn test_header_split_across_two_chunks() {
 }
 
 // =============================================================================
-// P5-2: Message header split across chunks
+// Message header split across chunks
 // =============================================================================
 
 #[test]
@@ -116,7 +115,7 @@ fn test_message_header_split_2_bytes() {
 }
 
 // =============================================================================
-// P5-3: Message body split across chunks
+// Message body split across chunks
 // =============================================================================
 
 #[test]
@@ -142,7 +141,7 @@ fn test_message_body_split() {
 }
 
 // =============================================================================
-// P5-4: Byte-at-a-time (ultimate stress test)
+// Byte-at-a-time (ultimate stress test)
 // =============================================================================
 
 #[test]
@@ -153,7 +152,7 @@ fn test_byte_at_a_time() {
 }
 
 // =============================================================================
-// P5-5: Multiple messages in one chunk
+// Multiple messages in one chunk
 // =============================================================================
 
 #[test]
@@ -164,7 +163,7 @@ fn test_all_in_one_chunk() {
 }
 
 // =============================================================================
-// P5-6: Large chunk then nothing
+// Large chunk then nothing
 // =============================================================================
 
 #[test]
@@ -183,7 +182,7 @@ fn test_large_chunk_then_empty() {
 }
 
 // =============================================================================
-// P5-7: Random chunk sizes (deterministic)
+// Random chunk sizes (deterministic)
 // =============================================================================
 
 #[test]
@@ -216,7 +215,7 @@ fn test_random_chunk_sizes() {
 }
 
 // =============================================================================
-// P5-8: Various fixed chunk sizes
+// Various fixed chunk sizes
 // =============================================================================
 
 #[test]
@@ -249,7 +248,7 @@ fn test_sample_ulg_chunk_sizes() {
         "Should parse some data messages from sample.ulg"
     );
 
-    // Parse with small chunks — should get the same count
+    // Parse with small chunks, should get the same count
     for chunk_size in [64, 256, 1024, 4096, 65536] {
         let count = parse_in_chunks(&bytes, chunk_size);
         assert_eq!(

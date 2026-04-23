@@ -35,10 +35,7 @@ fn collect_from_bytes<T>(
     out
 }
 
-fn collect_from_path<T>(
-    path: &str,
-    extract: &mut dyn FnMut(&Message) -> Option<T>,
-) -> Vec<T> {
+fn collect_from_path<T>(path: &str, extract: &mut dyn FnMut(&Message) -> Option<T>) -> Vec<T> {
     let mut out = Vec::new();
     read_file_with_simple_callback(path, &mut |msg| {
         if let Some(v) = extract(msg) {
@@ -144,7 +141,11 @@ fn dropout_synthetic_duration_is_surfaced() {
     builder.dropout(150);
 
     let durations = collect_from_bytes(&builder.build(), "dropout_synth", |msg| {
-        if let Message::DropoutMessage(d) = msg { Some(d.duration_ms) } else { None }
+        if let Message::DropoutMessage(d) = msg {
+            Some(d.duration_ms)
+        } else {
+            None
+        }
     });
 
     assert_eq!(durations, vec![150]);
@@ -154,7 +155,11 @@ fn dropout_synthetic_duration_is_surfaced() {
 #[test]
 fn dropout_sample_ulg_matches_pyulog_reference() {
     let durations = collect_from_path(&fixture_path("sample.ulg"), &mut |msg| {
-        if let Message::DropoutMessage(d) = msg { Some(d.duration_ms) } else { None }
+        if let Message::DropoutMessage(d) = msg {
+            Some(d.duration_ms)
+        } else {
+            None
+        }
     });
     assert_eq!(durations, vec![0, 26, 31, 62]);
 }
@@ -169,7 +174,11 @@ fn sync_synthetic_exposes_spec_magic_bytes() {
     builder.sync();
 
     let magic = collect_from_bytes(&builder.build(), "sync_magic", |msg| {
-        if let Message::SyncMessage(s) = msg { Some(s.magic) } else { None }
+        if let Message::SyncMessage(s) = msg {
+            Some(s.magic)
+        } else {
+            None
+        }
     });
 
     assert_eq!(
@@ -189,7 +198,12 @@ fn tagged_logged_string_fields_round_trip() {
 
     let entries = collect_from_bytes(&builder.build(), "tagged_logged", |msg| {
         if let Message::TaggedLoggedMessage(t) = msg {
-            Some((t.log_level, t.tag, t.timestamp, t.logged_message.to_string()))
+            Some((
+                t.log_level,
+                t.tag,
+                t.timestamp,
+                t.logged_message.to_string(),
+            ))
         } else {
             None
         }
@@ -213,7 +227,12 @@ fn parameter_default_surfaces_system_and_current_config_flags() {
     builder.parameter_default_i32(0x02, "MC_PITCHRATE_P", 150);
 
     let defaults = collect_from_bytes(&builder.build(), "param_default", |msg| {
-        if let Message::ParameterDefaultMessage(model::ParameterDefaultMessage::Int32(name, val, flags)) = msg {
+        if let Message::ParameterDefaultMessage(model::ParameterDefaultMessage::Int32(
+            name,
+            val,
+            flags,
+        )) = msg
+        {
             Some((*flags, name.to_string(), *val))
         } else {
             None
@@ -274,7 +293,11 @@ fn mixed_stream_surfaces_every_variant_and_preserves_data() {
 
     let _ = std::fs::remove_file(&tmp);
 
-    assert_eq!(counts.get("data"), Some(&2), "both data messages must survive injected types");
+    assert_eq!(
+        counts.get("data"),
+        Some(&2),
+        "both data messages must survive injected types"
+    );
     assert_eq!(counts.get("info"), Some(&1));
     assert_eq!(counts.get("dropout"), Some(&1));
     assert_eq!(counts.get("sync"), Some(&1));

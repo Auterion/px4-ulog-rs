@@ -1,8 +1,4 @@
-//! Priority 1: Regression tests for known bugs in px4-ulog-rs.
-//!
-//! These tests pin current broken behavior so fixes can be verified.
-//! Tests marked #[should_panic] or with comments about expected failures
-//! document bugs that need fixing.
+//! Regression tests pinning previously-fixed bugs.
 
 mod helpers;
 
@@ -54,7 +50,7 @@ fn parse_and_collect_params(bytes: &[u8]) -> Vec<(String, String)> {
 }
 
 // =============================================================================
-// P1-1: Off-by-one in parse_single_entry (file_reader.rs:203)
+// Off-by-one in parse_single_entry
 //
 // When buf.len() == consumed_len (message fits exactly), the parser
 // incorrectly treats it as needing more data. The condition should be
@@ -66,7 +62,7 @@ fn test_off_by_one_exact_buffer_boundary() {
     let (builder, _msg_id) = ULogBuilder::minimal_with_data();
     let bytes = builder.build();
 
-    // Feed the entire byte stream in one call — the last message should fit exactly.
+    // Feed the entire byte stream in one call, the last message should fit exactly.
     let results = parse_and_collect_data(&bytes);
 
     assert_eq!(
@@ -93,7 +89,7 @@ fn test_off_by_one_with_trailing_byte() {
 }
 
 // =============================================================================
-// P1-2: Non-monotonic timestamps silently dropped (file_reader.rs:385-398)
+// Non-monotonic timestamps silently dropped
 //
 // When a data message has timestamp <= last_timestamp, it is silently dropped.
 // This loses valid data when timestamps are equal (same microsecond) or when
@@ -156,7 +152,7 @@ fn test_non_monotonic_timestamp_decreasing_dropped() {
 }
 
 // =============================================================================
-// P1-7: Unsafe f32 conversion (unpack/mod.rs:75)
+// Unsafe f32 conversion
 //
 // Uses raw pointer cast instead of f32::from_bits(). Verify correctness
 // for special values before replacing the unsafe block.
@@ -187,7 +183,7 @@ fn test_unsafe_f32_conversion_special_values() {
     assert!(unpack::as_f32_le(&f32::NEG_INFINITY.to_le_bytes()).is_infinite());
     assert!(unpack::as_f32_le(&f32::NEG_INFINITY.to_le_bytes()).is_sign_negative());
 
-    // NaN — bit pattern should produce NaN
+    // NaN, bit pattern should produce NaN
     let nan = unpack::as_f32_le(&f32::NAN.to_le_bytes());
     assert!(nan.is_nan());
 

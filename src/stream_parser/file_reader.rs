@@ -543,7 +543,7 @@ impl<'c> LogParser<'c> {
                         "Info message key is not valid UTF-8",
                     )
                 })?;
-                // Key format is "type[size] name" — extract just the name part
+                // Key format is "type[size] name", extract just the name part
                 let key_name = key.split(' ').next_back().unwrap_or(key);
                 let value = &msg.data[(1 + key_len)..];
                 if let Some(cb) = &mut self.info_message_callback {
@@ -576,7 +576,7 @@ impl<'c> LogParser<'c> {
                         "MultiInfo message key is not valid UTF-8",
                     )
                 })?;
-                // Key format is "type[size] name" — extract just the name part
+                // Key format is "type[size] name", extract just the name part
                 let key_name = key.split(' ').next_back().unwrap_or(key);
                 let value = &msg.data[(2 + key_len)..];
 
@@ -596,7 +596,7 @@ impl<'c> LogParser<'c> {
                     entry.extend_from_slice(value);
 
                     if !is_continued {
-                        // Final fragment — emit the reassembled message
+                        // Final fragment, emit the reassembled message
                         let assembled_value = self.multi_info_buffer.remove(&key_owned).unwrap();
                         if let Some(cb) = &mut self.reassembled_multi_info_callback {
                             cb(&model::ReassembledMultiInfoMessage {

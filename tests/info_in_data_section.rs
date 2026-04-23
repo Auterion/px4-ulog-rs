@@ -146,7 +146,7 @@ fn test_info_interleaved_with_data() {
 }
 
 // =============================================================================
-// 4. Info in definitions AND data section — verify all received with correct values
+// 4. Info in definitions AND data section, verify all received with correct values
 // =============================================================================
 
 #[test]

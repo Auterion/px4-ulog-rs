@@ -1,9 +1,5 @@
-//! Integration tests defining the unified parser API after the seek-based parser is removed.
-//!
-//! These tests are written in a TDD style: they define the target API surface
-//! that the streaming/full parser should provide once the seek parser is gone.
-//! Tests that work with the current API are expected to pass now. Tests that
-//! require API changes are commented with what needs to change.
+//! Integration tests for the unified parser API across the streaming and
+//! full-parser entry points.
 
 // ---------------------------------------------------------------------------
 // Test 1: Header info accessible from stream/full parser
@@ -317,7 +313,7 @@ fn flattened_field_type_supports_all_12_types() {
 }
 
 // The seek parser's DataType only had 5 of 12 variants. The full/stream parser's
-// SomeVec and FlattenedFieldType handle all 12 — tested in somevec_supports_all_12_data_types
+// SomeVec and FlattenedFieldType handle all 12, tested in somevec_supports_all_12_data_types
 // and flattened_field_type_supports_all_12_types below.
 
 // ---------------------------------------------------------------------------
@@ -648,7 +644,7 @@ fn full_parser_handles_empty_file_gracefully() {
         env!("CARGO_MANIFEST_DIR")
     );
     let result = px4_ulog::full_parser::read_file(&filename);
-    // not_a_log_file.txt is 0 bytes — full_parser returns Ok with empty data
+    // not_a_log_file.txt is 0 bytes, full_parser returns Ok with empty data
     // (no bytes to parse means no error, just no messages)
     if let Ok(parsed) = result {
         assert!(
@@ -656,5 +652,5 @@ fn full_parser_handles_empty_file_gracefully() {
             "Empty file should produce no messages"
         );
     }
-    // Err is also acceptable — rejecting invalid files is fine
+    // Err is also acceptable, rejecting invalid files is fine
 }
