@@ -69,7 +69,11 @@ fn test_off_by_one_exact_buffer_boundary() {
     // Feed the entire byte stream in one call — the last message should fit exactly.
     let results = parse_and_collect_data(&bytes);
 
-    assert_eq!(results.len(), 1, "Expected 1 data message when it fits exactly in buffer");
+    assert_eq!(
+        results.len(),
+        1,
+        "Expected 1 data message when it fits exactly in buffer"
+    );
 }
 
 #[test]
@@ -81,7 +85,11 @@ fn test_off_by_one_with_trailing_byte() {
 
     let results = parse_and_collect_data(&bytes);
     // With trailing byte, the off-by-one is not triggered
-    assert_eq!(results.len(), 1, "Should parse 1 data message when there's a trailing byte");
+    assert_eq!(
+        results.len(),
+        1,
+        "Should parse 1 data message when there's a trailing byte"
+    );
 }
 
 // =============================================================================
@@ -113,7 +121,11 @@ fn test_non_monotonic_timestamp_equal_dropped() {
 
     let results = parse_and_collect_data(&bytes);
 
-    assert_eq!(results.len(), 3, "All three data messages should be received");
+    assert_eq!(
+        results.len(),
+        3,
+        "All three data messages should be received"
+    );
 }
 
 #[test]
@@ -136,7 +148,11 @@ fn test_non_monotonic_timestamp_decreasing_dropped() {
 
     let results = parse_and_collect_data(&bytes);
 
-    assert_eq!(results.len(), 3, "All three data messages should be received including out-of-order");
+    assert_eq!(
+        results.len(),
+        3,
+        "All three data messages should be received including out-of-order"
+    );
 }
 
 // =============================================================================
@@ -184,10 +200,18 @@ fn test_unsafe_f32_conversion_special_values() {
     assert_eq!(unpack::as_f32_le(&subnormal.to_le_bytes()), subnormal);
 
     // Cross-check: every value should match f32::from_bits
-    for bits in [0u32, 1, 0x7F800000, 0xFF800000, 0x7FC00000, 0x80000000, 0x3F800000, 0xBF800000] {
+    for bits in [
+        0u32, 1, 0x7F800000, 0xFF800000, 0x7FC00000, 0x80000000, 0x3F800000, 0xBF800000,
+    ] {
         let from_unpack = unpack::as_f32_le(&bits.to_le_bytes());
         let from_std = f32::from_bits(bits);
-        assert_eq!(from_unpack.to_bits(), from_std.to_bits(),
-            "Mismatch for bits 0x{:08X}: unpack={}, std={}", bits, from_unpack, from_std);
+        assert_eq!(
+            from_unpack.to_bits(),
+            from_std.to_bits(),
+            "Mismatch for bits 0x{:08X}: unpack={}, std={}",
+            bits,
+            from_unpack,
+            from_std
+        );
     }
 }

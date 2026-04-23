@@ -31,10 +31,7 @@ fn test_appended_file_has_more_data_than_non_appended() {
     let sample_count = count_data_messages(&fixture_path("sample.ulg"));
     let appended_count = count_data_messages(&fixture_path("sample_appended.ulg"));
 
-    assert!(
-        sample_count > 0,
-        "sample.ulg should have data messages"
-    );
+    assert!(sample_count > 0, "sample.ulg should have data messages");
     assert!(
         appended_count > 0,
         "sample_appended.ulg should have data messages"

@@ -229,7 +229,10 @@ fn test_appended_data_does_not_panic() {
             );
         }
         Err(e) => {
-            eprintln!("sample_appended: error (appended data not supported): {}", e);
+            eprintln!(
+                "sample_appended: error (appended data not supported): {}",
+                e
+            );
         }
     }
 }
@@ -293,7 +296,12 @@ fn test_all_fixtures_no_panic() {
                             .unwrap_or(0)
                     })
                     .sum();
-                eprintln!("  OK: {} ({} topics, ~{} msgs)", name, parsed.messages.len(), total_msgs);
+                eprintln!(
+                    "  OK: {} ({} topics, ~{} msgs)",
+                    name,
+                    parsed.messages.len(),
+                    total_msgs
+                );
             }
             Err(e) => {
                 eprintln!("  ERR: {} ({})", name, e);

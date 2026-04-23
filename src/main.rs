@@ -13,7 +13,12 @@ fn main() {
             if let Some(multi_map) = parsed.messages.get(&dataset_name) {
                 for (multi_id, fields) in multi_map {
                     let count = fields.values().next().map(somevec_len).unwrap_or(0);
-                    println!("Topic: {} (multi_id={}), Measurements: {}", dataset_name, multi_id.value(), count);
+                    println!(
+                        "Topic: {} (multi_id={}), Measurements: {}",
+                        dataset_name,
+                        multi_id.value(),
+                        count
+                    );
 
                     if count > 0 {
                         for i in 0..count {
@@ -38,8 +43,13 @@ fn main() {
             for (name, multi_map) in &parsed.messages {
                 for (multi_id, fields) in multi_map {
                     let count = fields.values().next().map(somevec_len).unwrap_or(0);
-                    println!("  {} (multi_id={}, {} messages, {} fields)",
-                        name, multi_id.value(), count, fields.len());
+                    println!(
+                        "  {} (multi_id={}, {} messages, {} fields)",
+                        name,
+                        multi_id.value(),
+                        count,
+                        fields.len()
+                    );
                 }
             }
         }

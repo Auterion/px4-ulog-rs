@@ -18,10 +18,7 @@ fn test_u64_one() {
 
 #[test]
 fn test_u64_max() {
-    assert_eq!(
-        unpack::as_u64_le(&[0xFF; 8]),
-        u64::MAX
-    );
+    assert_eq!(unpack::as_u64_le(&[0xFF; 8]), u64::MAX);
 }
 
 #[test]
@@ -88,18 +85,12 @@ fn test_i32_minus_one() {
 
 #[test]
 fn test_i32_min() {
-    assert_eq!(
-        unpack::as_i32_le(&[0x00, 0x00, 0x00, 0x80]),
-        i32::MIN
-    );
+    assert_eq!(unpack::as_i32_le(&[0x00, 0x00, 0x00, 0x80]), i32::MIN);
 }
 
 #[test]
 fn test_i32_max() {
-    assert_eq!(
-        unpack::as_i32_le(&[0xFF, 0xFF, 0xFF, 0x7F]),
-        i32::MAX
-    );
+    assert_eq!(unpack::as_i32_le(&[0xFF, 0xFF, 0xFF, 0x7F]), i32::MAX);
 }
 
 #[test]

@@ -12,9 +12,7 @@ fn parse_bytes(bytes: &[u8]) -> Result<(), String> {
     let mut noop = |_: &DataMessage| {};
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut noop);
-    parser
-        .consume_bytes(bytes)
-        .map_err(|e| format!("{:?}", e))
+    parser.consume_bytes(bytes).map_err(|e| format!("{:?}", e))
 }
 
 // =============================================================================
@@ -41,7 +39,10 @@ fn test_header_plus_one_byte() {
     let mut bytes = ULogBuilder::new().build();
     bytes.push(0x00); // partial message header
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Partial message header should stash as leftover, not error");
+    assert!(
+        result.is_ok(),
+        "Partial message header should stash as leftover, not error"
+    );
 }
 
 #[test]
@@ -65,7 +66,10 @@ fn test_truncated_message_body() {
     bytes.extend_from_slice(&[0u8; 50]); // only 50 of 100 bytes
     let result = parse_bytes(&bytes);
     // Should stash in leftover, not error (waiting for more data)
-    assert!(result.is_ok(), "Truncated message body should be stashed as leftover");
+    assert!(
+        result.is_ok(),
+        "Truncated message body should be stashed as leftover"
+    );
 }
 
 #[test]
@@ -90,7 +94,10 @@ fn test_max_length_message_header() {
     bytes.push(b'F');
     // Don't provide the body — should stash as leftover
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Max-length message header without body should be stashed");
+    assert!(
+        result.is_ok(),
+        "Max-length message header without body should be stashed"
+    );
 }
 
 // =============================================================================
@@ -295,7 +302,10 @@ fn test_flag_bits_data_appended_flag_accepted() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "DATA_APPENDED flag alone should be accepted");
+    assert!(
+        result.is_ok(),
+        "DATA_APPENDED flag alone should be accepted"
+    );
 }
 
 #[test]
@@ -306,7 +316,10 @@ fn test_flag_bits_too_short() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_err(), "FlagBits shorter than 40 bytes should error");
+    assert!(
+        result.is_err(),
+        "FlagBits shorter than 40 bytes should error"
+    );
 }
 
 // =============================================================================
@@ -322,7 +335,10 @@ fn test_unknown_message_type_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Unknown message type should be silently skipped");
+    assert!(
+        result.is_ok(),
+        "Unknown message type should be silently skipped"
+    );
 }
 
 // =============================================================================
@@ -337,7 +353,10 @@ fn test_info_message_silently_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Info message should be silently ignored (known gap)");
+    assert!(
+        result.is_ok(),
+        "Info message should be silently ignored (known gap)"
+    );
 }
 
 #[test]
@@ -351,7 +370,10 @@ fn test_dropout_message_silently_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Dropout message should be silently ignored (known gap)");
+    assert!(
+        result.is_ok(),
+        "Dropout message should be silently ignored (known gap)"
+    );
 }
 
 #[test]
@@ -365,7 +387,10 @@ fn test_sync_message_silently_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "Sync message should be silently ignored (known gap)");
+    assert!(
+        result.is_ok(),
+        "Sync message should be silently ignored (known gap)"
+    );
 }
 
 #[test]
@@ -379,7 +404,10 @@ fn test_remove_logged_silently_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "RemoveLogged should be silently ignored (known gap)");
+    assert!(
+        result.is_ok(),
+        "RemoveLogged should be silently ignored (known gap)"
+    );
 }
 
 #[test]
@@ -393,7 +421,10 @@ fn test_tagged_logged_string_silently_ignored() {
     let mut bytes = builder.build();
     bytes.push(0x00);
     let result = parse_bytes(&bytes);
-    assert!(result.is_ok(), "TaggedLoggedString should be silently ignored (known gap)");
+    assert!(
+        result.is_ok(),
+        "TaggedLoggedString should be silently ignored (known gap)"
+    );
 }
 
 // =============================================================================

@@ -48,7 +48,10 @@ fn parse_with_timestamp_type(
 
     let mut cb = |msg: &DataMessage| {
         let fmt = msg.flattened_format;
-        let ts_field = fmt.timestamp_field.as_ref().expect("should have timestamp field");
+        let ts_field = fmt
+            .timestamp_field
+            .as_ref()
+            .expect("should have timestamp field");
         result_ts_type = Some(ts_field.field_type.clone());
         result_ts_value = Some(ts_field.parse_timestamp(msg.data));
     };
@@ -69,11 +72,7 @@ fn test_uint64_timestamp() {
     let ts_val: u64 = 123_456_789;
     let extra = 1.5f32.to_le_bytes();
 
-    let (field_type, parsed) = parse_with_timestamp_type(
-        "uint64_t",
-        &ts_val.to_le_bytes(),
-        &extra,
-    );
+    let (field_type, parsed) = parse_with_timestamp_type("uint64_t", &ts_val.to_le_bytes(), &extra);
 
     assert_eq!(field_type, TimestampFieldType::UInt64);
     assert_eq!(parsed, ts_val);
@@ -84,11 +83,7 @@ fn test_uint32_timestamp() {
     let ts_val: u32 = 1_000_000; // 1 second in microseconds
     let extra = 2.5f32.to_le_bytes();
 
-    let (field_type, parsed) = parse_with_timestamp_type(
-        "uint32_t",
-        &ts_val.to_le_bytes(),
-        &extra,
-    );
+    let (field_type, parsed) = parse_with_timestamp_type("uint32_t", &ts_val.to_le_bytes(), &extra);
 
     assert_eq!(field_type, TimestampFieldType::UInt32);
     assert_eq!(parsed, ts_val as u64);
@@ -99,11 +94,7 @@ fn test_uint16_timestamp() {
     let ts_val: u16 = 50_000; // 50ms in microseconds
     let extra = 3.5f32.to_le_bytes();
 
-    let (field_type, parsed) = parse_with_timestamp_type(
-        "uint16_t",
-        &ts_val.to_le_bytes(),
-        &extra,
-    );
+    let (field_type, parsed) = parse_with_timestamp_type("uint16_t", &ts_val.to_le_bytes(), &extra);
 
     assert_eq!(field_type, TimestampFieldType::UInt16);
     assert_eq!(parsed, ts_val as u64);
@@ -117,11 +108,7 @@ fn test_uint8_timestamp() {
     let ts_val: u8 = 200; // 200 milliseconds
     let extra = 4.5f32.to_le_bytes();
 
-    let (field_type, parsed) = parse_with_timestamp_type(
-        "uint8_t",
-        &[ts_val],
-        &extra,
-    );
+    let (field_type, parsed) = parse_with_timestamp_type("uint8_t", &[ts_val], &extra);
 
     assert_eq!(field_type, TimestampFieldType::UInt8);
     assert_eq!(parsed, ts_val as u64);
@@ -189,13 +176,16 @@ fn test_uint8_timestamp_unit_documentation() {
 
     // If this were normalized to microseconds, it would be 100_000.
     // This assertion documents that normalization does NOT happen:
-    assert_ne!(parsed, 100_000, "Parser should NOT normalize uint8 timestamps (currently). \
-        If this assertion fails, it means normalization was added — update this test.");
+    assert_ne!(
+        parsed, 100_000,
+        "Parser should NOT normalize uint8 timestamps (currently). \
+        If this assertion fails, it means normalization was added — update this test."
+    );
 
     // Demonstrate the correct interpretation for consumers:
     let microseconds = match field_type {
         TimestampFieldType::UInt8 => parsed * 1000, // milliseconds -> microseconds
-        _ => parsed,                                 // already microseconds
+        _ => parsed,                                // already microseconds
     };
     assert_eq!(microseconds, 100_000);
 }

@@ -39,10 +39,7 @@ fn header_timestamp_via_stream_parser() {
 #[test]
 fn header_timestamp_sample_ulg_via_stream_parser() {
     use px4_ulog::stream_parser::LogParser;
-    let filename = format!(
-        "{}/tests/fixtures/sample.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let filename = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
     let data = std::fs::read(&filename).unwrap();
     let mut parser = LogParser::default();
     parser.consume_bytes(&data[..16]).unwrap();
@@ -168,7 +165,7 @@ fn dataset_first_gps_values_match_known_reference() {
     assert_eq!(first_f32(&instance["cog_rad"]), 0.0);
     assert_eq!(first_i32(&instance["timestamp_time_relative"]), 0);
     assert_eq!(first_u8(&instance["fix_type"]), 3);
-    assert_eq!(first_bool(&instance["vel_ned_valid"]), false);
+    assert!(!first_bool(&instance["vel_ned_valid"]));
     assert_eq!(first_u8(&instance["satellites_used"]), 10);
 }
 
@@ -193,10 +190,7 @@ fn topic_names_via_full_parser_main_fixture() {
         names.iter().any(|n| n.as_str() == "vehicle_gps_position"),
         "Expected vehicle_gps_position in parsed topics"
     );
-    assert!(
-        !names.is_empty(),
-        "Expected at least one topic"
-    );
+    assert!(!names.is_empty(), "Expected at least one topic");
 }
 
 #[test]
@@ -213,7 +207,9 @@ fn topic_names_via_full_parser() {
 
     let topic_names: Vec<&String> = parsed.messages.keys().collect();
     assert!(
-        topic_names.iter().any(|n| n.as_str() == "vehicle_gps_position"),
+        topic_names
+            .iter()
+            .any(|n| n.as_str() == "vehicle_gps_position"),
         "Expected vehicle_gps_position in full_parser topic names"
     );
 }
@@ -223,10 +219,7 @@ fn topic_names_via_full_parser_sample_file() {
     // sample.ulg is known to have 15 topics according to fixture description.
     use px4_ulog::full_parser::read_file;
 
-    let filename = format!(
-        "{}/tests/fixtures/sample.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let filename = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
     let parsed = read_file(&filename).unwrap();
 
     let topic_count = parsed.messages.len();
@@ -240,8 +233,8 @@ fn topic_names_via_full_parser_sample_file() {
 #[test]
 fn topic_names_via_stream_callback() {
     // Demonstrate that topic names can also be collected via the streaming callback API.
-    use px4_ulog::stream_parser::{read_file_with_simple_callback, Message};
     use px4_ulog::stream_parser::file_reader::SimpleCallbackResult;
+    use px4_ulog::stream_parser::{read_file_with_simple_callback, Message};
     use std::collections::HashSet;
 
     let filename = format!(
@@ -293,7 +286,11 @@ fn somevec_supports_all_12_data_types() {
         SomeVec::Char(vec!['a']),
     ];
 
-    assert_eq!(variants.len(), 12, "SomeVec should have 12 data type variants");
+    assert_eq!(
+        variants.len(),
+        12,
+        "SomeVec should have 12 data type variants"
+    );
 }
 
 #[test]
@@ -301,7 +298,7 @@ fn flattened_field_type_supports_all_12_types() {
     use px4_ulog::full_parser::FlattenedFieldType;
 
     // Verify all 12 FlattenedFieldType variants exist.
-    let types = vec![
+    let types = [
         FlattenedFieldType::Int8,
         FlattenedFieldType::UInt8,
         FlattenedFieldType::Int16,
@@ -445,10 +442,7 @@ fn full_parser_byte_slice_input() {
     // For now, verify that LogParser::consume_bytes works as the foundation.
     use px4_ulog::stream_parser::LogParser;
 
-    let filename = format!(
-        "{}/tests/fixtures/sample.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let filename = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
     let data = std::fs::read(&filename).unwrap();
 
     let mut message_count: usize = 0;
@@ -527,7 +521,7 @@ fn multi_id_used_as_hash_key() {
 
     assert_eq!(map.get(&MultiId::new(0)).unwrap(), "instance_0");
     assert_eq!(map.get(&MultiId::new(1)).unwrap(), "instance_1");
-    assert!(map.get(&MultiId::new(2)).is_none());
+    assert!(!map.contains_key(&MultiId::new(2)));
 }
 
 #[test]
@@ -573,9 +567,9 @@ fn esc_status_nested_sub_messages_with_multi_id() {
 
 #[test]
 fn stream_callback_gps_count_matches_full_parser() {
-    use px4_ulog::stream_parser::{read_file_with_simple_callback, Message};
-    use px4_ulog::stream_parser::file_reader::SimpleCallbackResult;
     use px4_ulog::full_parser::{read_file, MultiId};
+    use px4_ulog::stream_parser::file_reader::SimpleCallbackResult;
+    use px4_ulog::stream_parser::{read_file_with_simple_callback, Message};
 
     let filename = format!(
         "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
@@ -656,8 +650,11 @@ fn full_parser_handles_empty_file_gracefully() {
     let result = px4_ulog::full_parser::read_file(&filename);
     // not_a_log_file.txt is 0 bytes — full_parser returns Ok with empty data
     // (no bytes to parse means no error, just no messages)
-    match result {
-        Ok(parsed) => assert!(parsed.messages.is_empty(), "Empty file should produce no messages"),
-        Err(_) => {} // Also acceptable — rejecting invalid files is fine
+    if let Ok(parsed) = result {
+        assert!(
+            parsed.messages.is_empty(),
+            "Empty file should produce no messages"
+        );
     }
+    // Err is also acceptable — rejecting invalid files is fine
 }

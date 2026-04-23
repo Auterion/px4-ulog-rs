@@ -48,9 +48,7 @@ fn parse_to_tags(bytes: &[u8], test_name: &str) -> Vec<String> {
     read_file_with_simple_callback(tmp.to_str().unwrap(), &mut |msg| {
         match msg {
             Message::Data(d) => tags.push(format!("Data(msg_id={})", d.msg_id)),
-            Message::RemoveLoggedMessage(r) => {
-                tags.push(format!("Remove(msg_id={})", r.msg_id))
-            }
+            Message::RemoveLoggedMessage(r) => tags.push(format!("Remove(msg_id={})", r.msg_id)),
             Message::LoggedMessage(_) => tags.push("LoggedMessage".to_string()),
             Message::ParameterMessage(_) => tags.push("ParameterMessage".to_string()),
             Message::InfoMessage(_) => tags.push("InfoMessage".to_string()),
@@ -58,9 +56,7 @@ fn parse_to_tags(bytes: &[u8], test_name: &str) -> Vec<String> {
             Message::SyncMessage(_) => tags.push("SyncMessage".to_string()),
             Message::MultiInfoMessage(_) => tags.push("MultiInfoMessage".to_string()),
             Message::TaggedLoggedMessage(_) => tags.push("TaggedLoggedMessage".to_string()),
-            Message::ParameterDefaultMessage(_) => {
-                tags.push("ParameterDefaultMessage".to_string())
-            }
+            Message::ParameterDefaultMessage(_) => tags.push("ParameterDefaultMessage".to_string()),
         }
         SimpleCallbackResult::KeepReading
     })
@@ -106,10 +102,7 @@ fn test_data_after_remove_still_delivered() {
     );
 
     // Count Data messages for msg_id=0
-    let data_count = tags
-        .iter()
-        .filter(|t| *t == "Data(msg_id=0)")
-        .count();
+    let data_count = tags.iter().filter(|t| *t == "Data(msg_id=0)").count();
 
     // KNOWN LIMITATION: Both Data messages are delivered, even the one after Remove.
     // If filtering were implemented, this count would be 1 (only pre-remove data).
@@ -148,10 +141,7 @@ fn test_remove_does_not_affect_other_msg_ids() {
     let tags = parse_to_tags(&b.build(), "test_remove_does_not_affect_other_msg_ids");
 
     // msg_id=1 should have 2 Data messages
-    let data_1_count = tags
-        .iter()
-        .filter(|t| *t == "Data(msg_id=1)")
-        .count();
+    let data_1_count = tags.iter().filter(|t| *t == "Data(msg_id=1)").count();
     assert_eq!(
         data_1_count, 2,
         "Remove of msg_id=0 should not affect msg_id=1 data delivery"
@@ -164,10 +154,7 @@ fn test_remove_does_not_affect_other_msg_ids() {
     );
 
     // msg_id=0 should have at least 1 Data message (the pre-remove one)
-    let data_0_count = tags
-        .iter()
-        .filter(|t| *t == "Data(msg_id=0)")
-        .count();
+    let data_0_count = tags.iter().filter(|t| *t == "Data(msg_id=0)").count();
     assert!(
         data_0_count >= 1,
         "msg_id=0 should have at least the pre-remove Data message"
@@ -187,7 +174,7 @@ fn test_remove_message_is_delivered_to_callback() {
     b.remove_logged(0);
 
     let tmp = std::env::temp_dir().join("test_remove_message_callback.ulg");
-    std::fs::write(&tmp, &b.build()).expect("write temp file");
+    std::fs::write(&tmp, b.build()).expect("write temp file");
 
     let mut remove_msg_ids: Vec<u16> = Vec::new();
 
@@ -206,10 +193,7 @@ fn test_remove_message_is_delivered_to_callback() {
         1,
         "Expected exactly one Remove message"
     );
-    assert_eq!(
-        remove_msg_ids[0], 0,
-        "Remove message should have msg_id=0"
-    );
+    assert_eq!(remove_msg_ids[0], 0, "Remove message should have msg_id=0");
 }
 
 // =============================================================================
@@ -244,10 +228,7 @@ fn test_remove_for_never_registered_msg_id() {
     );
 
     // Registered msg_id=0 data should be unaffected
-    let data_count = tags
-        .iter()
-        .filter(|t| *t == "Data(msg_id=0)")
-        .count();
+    let data_count = tags.iter().filter(|t| *t == "Data(msg_id=0)").count();
     assert_eq!(
         data_count, 2,
         "Data for msg_id=0 should be unaffected by removing unregistered msg_id=99"

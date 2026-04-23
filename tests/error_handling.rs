@@ -46,8 +46,10 @@ fn error_implements_std_error_trait() {
 fn error_works_with_question_mark_operator() {
     // Simulates using ? in a function returning Box<dyn std::error::Error>.
     fn inner() -> Result<(), Box<dyn std::error::Error>> {
-        let bytes = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00,
-                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let bytes = vec![
+            0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let mut noop = |_: &DataMessage| {};
         let mut parser = LogParser::default();
         parser.set_data_message_callback(&mut noop);
@@ -68,16 +70,25 @@ fn error_works_with_question_mark_operator() {
 fn display_for_invalid_header_contains_context() {
     let err = UlogParseError::new(ParseErrorType::InvalidFile, "The header does not match");
     let msg = format!("{}", err);
-    assert!(msg.contains("header") || msg.contains("invalid") || msg.contains("Header"),
-            "Display should mention the header problem, got: {}", msg);
+    assert!(
+        msg.contains("header") || msg.contains("invalid") || msg.contains("Header"),
+        "Display should mention the header problem, got: {}",
+        msg
+    );
 }
 
 #[test]
 fn display_for_other_error_contains_description() {
-    let err = UlogParseError::new(ParseErrorType::Other, "duplicate registration for msg_id 42");
+    let err = UlogParseError::new(
+        ParseErrorType::Other,
+        "duplicate registration for msg_id 42",
+    );
     let msg = format!("{}", err);
-    assert!(msg.contains("42"),
-            "Display should include the description context, got: {}", msg);
+    assert!(
+        msg.contains("42"),
+        "Display should include the description context, got: {}",
+        msg
+    );
 }
 
 // =============================================================================
@@ -207,7 +218,7 @@ fn duplicate_subscription_same_msg_id_is_error() {
         .format("topic_a", &[("uint64_t", "timestamp")])
         .add_logged(0, 0, "topic_a")
         .add_logged(0, 1, "topic_a"); // same msg_id=0, different multi_id
-    // Trigger data parsing with a data message.
+                                      // Trigger data parsing with a data message.
     builder.data(0, &0u64.to_le_bytes());
     let bytes = builder.build();
 
@@ -506,10 +517,7 @@ fn error_message_for_wrong_size_contains_size_info() {
     let mut builder = ULogBuilder::new();
     builder
         .flag_bits()
-        .format(
-            "baro",
-            &[("uint64_t", "timestamp"), ("float", "pressure")],
-        )
+        .format("baro", &[("uint64_t", "timestamp"), ("float", "pressure")])
         .add_logged(0, 0, "baro");
     // Format expects 2 + 8 + 4 = 14 bytes. Send only 2 + 2 = 4 bytes.
     builder.data(0, &[0u8; 2]);

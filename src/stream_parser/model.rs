@@ -31,7 +31,7 @@ impl<'a> ULogMessage<'a> {
     //pub fn parse(data: &'a [u8]) -> (Option<Self>, usize) {}
 
     pub fn new(msg_type: u8, data: &'a [u8]) -> Self {
-        if data.len() > u16::max_value() as usize {
+        if data.len() > u16::MAX as usize {
             panic!("slice is too long");
         }
         Self { msg_type, data }
@@ -209,27 +209,28 @@ impl FlattenedFormat {
             .iter()
             .map(|f| (f.flattened_field_name.to_string(), (*f).clone()))
             .collect();
-        let timestamp_field = name_to_field
-            .get("timestamp")
-            .and_then(|field| match field.field_type {
-                FlattenedFieldType::UInt8 => Some(TimestampField {
-                    field_type: TimestampFieldType::UInt8,
-                    offset: field.offset,
-                }),
-                FlattenedFieldType::UInt16 => Some(TimestampField {
-                    field_type: TimestampFieldType::UInt16,
-                    offset: field.offset,
-                }),
-                FlattenedFieldType::UInt32 => Some(TimestampField {
-                    field_type: TimestampFieldType::UInt32,
-                    offset: field.offset,
-                }),
-                FlattenedFieldType::UInt64 => Some(TimestampField {
-                    field_type: TimestampFieldType::UInt64,
-                    offset: field.offset,
-                }),
-                _ => None,
-            });
+        let timestamp_field =
+            name_to_field
+                .get("timestamp")
+                .and_then(|field| match field.field_type {
+                    FlattenedFieldType::UInt8 => Some(TimestampField {
+                        field_type: TimestampFieldType::UInt8,
+                        offset: field.offset,
+                    }),
+                    FlattenedFieldType::UInt16 => Some(TimestampField {
+                        field_type: TimestampFieldType::UInt16,
+                        offset: field.offset,
+                    }),
+                    FlattenedFieldType::UInt32 => Some(TimestampField {
+                        field_type: TimestampFieldType::UInt32,
+                        offset: field.offset,
+                    }),
+                    FlattenedFieldType::UInt64 => Some(TimestampField {
+                        field_type: TimestampFieldType::UInt64,
+                        offset: field.offset,
+                    }),
+                    _ => None,
+                });
         Ok(Self {
             message_name,
             fields,
@@ -294,7 +295,7 @@ pub struct FieldParser<T: ParseableFieldType> {
 impl<T: ParseableFieldType> FieldParser<T> {
     // data e.g. looks like the member in the DataMessage
     pub fn parse(&self, data: &[u8]) -> T {
-        return T::parse(&data[(self.offset as usize)..]);
+        T::parse(&data[(self.offset as usize)..])
     }
     pub fn offset(&self) -> u16 {
         self.offset
@@ -414,5 +415,4 @@ mod tests {
         assert_eq!(10, parser.offset());
         assert_eq!(0x01000000, parser.parse(&data));
     }
-
 }

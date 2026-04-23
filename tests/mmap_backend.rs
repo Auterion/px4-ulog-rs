@@ -46,7 +46,9 @@ fn parse_bytes_counting(data: &[u8]) -> (usize, usize, usize) {
     parser.set_data_message_callback(&mut data_cb);
     parser.set_logged_string_message_callback(&mut log_cb);
     parser.set_parameter_message_callback(&mut param_cb);
-    parser.consume_bytes(data).expect("consume_bytes should succeed");
+    parser
+        .consume_bytes(data)
+        .expect("consume_bytes should succeed");
 
     (data_count.get(), log_count.get(), param_count.get())
 }
@@ -221,7 +223,7 @@ fn test_all_fixtures_byte_slice_matches_file_parse() {
     for fixture in &fixtures {
         let path = fixture_path(fixture);
         let file_count = parse_file_counting_data(&path);
-        let data = std::fs::read(&path).expect(&format!("should read {}", fixture));
+        let data = std::fs::read(&path).unwrap_or_else(|_| panic!("should read {}", fixture));
         let (byte_count, _, _) = parse_bytes_counting(&data);
 
         assert_eq!(
@@ -298,9 +300,7 @@ fn test_full_parser_from_bytes_matches_file_parse() {
     //         "Multi-id count mismatch for topic {}", topic
     //     );
     // }
-    panic!(
-        "full_parser::read_bytes(&[u8]) is not yet implemented."
-    );
+    panic!("full_parser::read_bytes(&[u8]) is not yet implemented.");
 }
 
 // =============================================================================

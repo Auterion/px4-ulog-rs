@@ -15,19 +15,14 @@ use self::model::{
     SyncMessage,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 enum ParseStatus {
+    #[default]
     Beginning,
     AfterHeader,
     InDefinitions,
     InData,
     //TODO: appends, probably InData works too
-}
-
-impl Default for ParseStatus {
-    fn default() -> Self {
-        ParseStatus::Beginning
-    }
 }
 
 #[derive(Default)]
@@ -98,7 +93,8 @@ pub struct LogParser<'c> {
     multi_info_message_callback: Option<&'c mut dyn FnMut(&model::MultiInfoMessage)>,
     reassembled_multi_info_callback: Option<&'c mut dyn FnMut(&model::ReassembledMultiInfoMessage)>,
     remove_logged_message_callback: Option<&'c mut dyn FnMut(&model::RemoveLoggedMessage)>,
-    tagged_logged_string_message_callback: Option<&'c mut dyn FnMut(&model::TaggedLoggedStringMessage)>,
+    tagged_logged_string_message_callback:
+        Option<&'c mut dyn FnMut(&model::TaggedLoggedStringMessage)>,
     parameter_default_message_callback: Option<&'c mut dyn FnMut(&model::ParameterDefaultMessage)>,
     version: u8,
     timestamp: u64,
@@ -113,7 +109,7 @@ pub struct LogParser<'c> {
     multi_info_buffer: HashMap<String, Vec<u8>>,
 }
 
-const MAX_MESSAGE_SIZE: usize = 2 + 1 + (u16::max_value() as usize);
+const MAX_MESSAGE_SIZE: usize = 2 + 1 + (u16::MAX as usize);
 const HEADER_BYTES: [u8; 7] = [85, 76, 111, 103, 1, 18, 53];
 
 impl<'c> LogParser<'c> {
@@ -132,10 +128,7 @@ impl<'c> LogParser<'c> {
     ) {
         self.parameter_message_callback = Some(c)
     }
-    pub fn set_info_message_callback<CB: FnMut(&model::InfoMessage)>(
-        &mut self,
-        c: &'c mut CB,
-    ) {
+    pub fn set_info_message_callback<CB: FnMut(&model::InfoMessage)>(&mut self, c: &'c mut CB) {
         self.info_message_callback = Some(c)
     }
     pub fn set_dropout_message_callback<CB: FnMut(&model::DropoutMessage)>(
@@ -144,10 +137,7 @@ impl<'c> LogParser<'c> {
     ) {
         self.dropout_message_callback = Some(c)
     }
-    pub fn set_sync_message_callback<CB: FnMut(&model::SyncMessage)>(
-        &mut self,
-        c: &'c mut CB,
-    ) {
+    pub fn set_sync_message_callback<CB: FnMut(&model::SyncMessage)>(&mut self, c: &'c mut CB) {
         self.sync_message_callback = Some(c)
     }
     pub fn set_multi_info_message_callback<CB: FnMut(&model::MultiInfoMessage)>(
@@ -168,7 +158,9 @@ impl<'c> LogParser<'c> {
     ) {
         self.remove_logged_message_callback = Some(c)
     }
-    pub fn set_tagged_logged_string_message_callback<CB: FnMut(&model::TaggedLoggedStringMessage)>(
+    pub fn set_tagged_logged_string_message_callback<
+        CB: FnMut(&model::TaggedLoggedStringMessage),
+    >(
         &mut self,
         c: &'c mut CB,
     ) {
@@ -220,7 +212,7 @@ impl<'c> LogParser<'c> {
             buf = &buf[(leftover_bytes_used - original_leftover_len)..buf.len()];
         }
         loop {
-            let num_bytes_consumed = self.parse_single_entry(&buf)?;
+            let num_bytes_consumed = self.parse_single_entry(buf)?;
             if num_bytes_consumed == 0 {
                 self.leftover.extend_from_slice(buf);
                 return Ok(());
@@ -322,14 +314,20 @@ impl<'c> LogParser<'c> {
                 if (flag_bits.incompat_flags[0] & !ULOG_INCOMPAT_FLAG0_DATA_APPENDED_MASK) != 0 {
                     return Err(UlogParseError::new(
                         ParseErrorType::Other,
-                        &format!("Cannot parse log, incompatible flag bits set (idx={}, value={})", 0, flag_bits.incompat_flags[0])
+                        &format!(
+                            "Cannot parse log, incompatible flag bits set (idx={}, value={})",
+                            0, flag_bits.incompat_flags[0]
+                        ),
                     ));
                 }
                 for flag_idx in 1..flag_bits.incompat_flags.len() {
                     if flag_bits.incompat_flags[flag_idx] != 0 {
                         return Err(UlogParseError::new(
                             ParseErrorType::Other,
-                            &format!("Cannot parse log, incompatible flag bits set (idx={}, value={})", flag_idx, flag_bits.incompat_flags[flag_idx])
+                            &format!(
+                                "Cannot parse log, incompatible flag bits set (idx={}, value={})",
+                                flag_idx, flag_bits.incompat_flags[flag_idx]
+                            ),
                         ));
                     }
                 }
@@ -426,7 +424,7 @@ impl<'c> LogParser<'c> {
                 if msg.data.len() < 9 {
                     return Err(UlogParseError::new(
                         ParseErrorType::Other,
-                        &"Logged string message was too short",
+                        "Logged string message was too short",
                     ));
                 }
                 let log_level = msg.data[0];
@@ -515,7 +513,7 @@ impl<'c> LogParser<'c> {
             }
 
             model::MessageType::Info => {
-                if msg.data.len() < 1 {
+                if msg.data.is_empty() {
                     return Err(UlogParseError::new(
                         ParseErrorType::Other,
                         "Info message too short",
@@ -530,10 +528,13 @@ impl<'c> LogParser<'c> {
                 }
                 let key_bytes = &msg.data[1..(1 + key_len)];
                 let key = std::str::from_utf8(key_bytes).map_err(|_| {
-                    UlogParseError::new(ParseErrorType::Other, "Info message key is not valid UTF-8")
+                    UlogParseError::new(
+                        ParseErrorType::Other,
+                        "Info message key is not valid UTF-8",
+                    )
                 })?;
                 // Key format is "type[size] name" — extract just the name part
-                let key_name = key.split(' ').last().unwrap_or(key);
+                let key_name = key.split(' ').next_back().unwrap_or(key);
                 let value = &msg.data[(1 + key_len)..];
                 if let Some(cb) = &mut self.info_message_callback {
                     cb(&InfoMessage {
@@ -560,10 +561,13 @@ impl<'c> LogParser<'c> {
                 }
                 let key_bytes = &msg.data[2..(2 + key_len)];
                 let key = std::str::from_utf8(key_bytes).map_err(|_| {
-                    UlogParseError::new(ParseErrorType::Other, "MultiInfo message key is not valid UTF-8")
+                    UlogParseError::new(
+                        ParseErrorType::Other,
+                        "MultiInfo message key is not valid UTF-8",
+                    )
                 })?;
                 // Key format is "type[size] name" — extract just the name part
-                let key_name = key.split(' ').last().unwrap_or(key);
+                let key_name = key.split(' ').next_back().unwrap_or(key);
                 let value = &msg.data[(2 + key_len)..];
 
                 // Still fire the raw per-fragment callback for backward compatibility
@@ -792,7 +796,11 @@ fn parse_flag_bits(message: &model::ULogMessage) -> Result<FlagBits, UlogParseEr
     Ok(FlagBits {
         compat_flags,
         incompat_flags,
-        appended_offsets: [unpack::as_u64_le( & message.data[16..24]), unpack::as_u64_le( & message.data[24..32]), unpack::as_u64_le( & message.data[32..40])],
+        appended_offsets: [
+            unpack::as_u64_le(&message.data[16..24]),
+            unpack::as_u64_le(&message.data[24..32]),
+            unpack::as_u64_le(&message.data[32..40]),
+        ],
     })
 }
 
@@ -809,7 +817,7 @@ struct Format {
 }
 
 fn parse_format(message: &model::ULogMessage) -> Result<Format, UlogParseError> {
-    let format = std::str::from_utf8(&message.data()).map_err(|_| {
+    let format = std::str::from_utf8(message.data()).map_err(|_| {
         UlogParseError::new(ParseErrorType::Other, "format message is not a string")
     })?;
 
@@ -822,8 +830,10 @@ fn parse_format(message: &model::ULogMessage) -> Result<Format, UlogParseError> 
         ));
     }
 
-    let mut result = Format::default();
-    result.message_name = parts[0].to_string();
+    let mut result = Format {
+        message_name: parts[0].to_string(),
+        ..Format::default()
+    };
 
     for type_and_name in parts[1].split(";").filter(|s| !s.is_empty()) {
         let split: Vec<&str> = type_and_name.split(" ").collect();
@@ -1043,13 +1053,12 @@ fn add_flattened_message(
                 // padding is skipped on the last field on the base level
                 break;
             }
-            let append_to;
             // Only add the name for non-padding fields
-            if field.field_name.starts_with("_padding") {
-                append_to = &mut padding_trash_vec;
+            let append_to = if field.field_name.starts_with("_padding") {
+                &mut padding_trash_vec
             } else {
-                append_to = list_to_append_to;
-            }
+                &mut *list_to_append_to
+            };
             offset = flatten_field(
                 field,
                 offset,
@@ -1135,35 +1144,35 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     let c_cell: RefCell<&mut CB> = RefCell::new(c);
     let mut wrapped_data_message_callback = |data_message: &DataMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::Data(&data_message))
+            c_cell.borrow_mut().deref_mut()(&Message::Data(data_message))
         {
             stop_reading.set(true);
         }
     };
     let mut wrapped_string_message_callback = |data_message: &model::LoggedStringMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::LoggedMessage(&data_message))
+            c_cell.borrow_mut().deref_mut()(&Message::LoggedMessage(data_message))
         {
             stop_reading.set(true);
         }
     };
     let mut wrapped_parameter_message_callback = |parameter_message: &model::ParameterMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::ParameterMessage(&parameter_message))
+            c_cell.borrow_mut().deref_mut()(&Message::ParameterMessage(parameter_message))
         {
             stop_reading.set(true);
         }
     };
     let mut wrapped_info_message_callback = |info_message: &model::InfoMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::InfoMessage(&info_message))
+            c_cell.borrow_mut().deref_mut()(&Message::InfoMessage(info_message))
         {
             stop_reading.set(true);
         }
     };
     let mut wrapped_dropout_message_callback = |dropout_message: &model::DropoutMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::DropoutMessage(&dropout_message))
+            c_cell.borrow_mut().deref_mut()(&Message::DropoutMessage(dropout_message))
         {
             stop_reading.set(true);
         }
@@ -1176,7 +1185,7 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     log_parser.set_dropout_message_callback(&mut wrapped_dropout_message_callback);
     let mut wrapped_sync_message_callback = |sync_message: &model::SyncMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::SyncMessage(&sync_message))
+            c_cell.borrow_mut().deref_mut()(&Message::SyncMessage(sync_message))
         {
             stop_reading.set(true);
         }
@@ -1184,36 +1193,42 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     log_parser.set_sync_message_callback(&mut wrapped_sync_message_callback);
     let mut wrapped_multi_info_message_callback = |multi_info_message: &model::MultiInfoMessage| {
         if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::MultiInfoMessage(&multi_info_message))
+            c_cell.borrow_mut().deref_mut()(&Message::MultiInfoMessage(multi_info_message))
         {
             stop_reading.set(true);
         }
     };
     log_parser.set_multi_info_message_callback(&mut wrapped_multi_info_message_callback);
-    let mut wrapped_remove_logged_message_callback = |remove_logged_message: &model::RemoveLoggedMessage| {
-        if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::RemoveLoggedMessage(&remove_logged_message))
-        {
-            stop_reading.set(true);
-        }
-    };
+    let mut wrapped_remove_logged_message_callback =
+        |remove_logged_message: &model::RemoveLoggedMessage| {
+            if let SimpleCallbackResult::Stop = c_cell.borrow_mut().deref_mut()(
+                &Message::RemoveLoggedMessage(remove_logged_message),
+            ) {
+                stop_reading.set(true);
+            }
+        };
     log_parser.set_remove_logged_message_callback(&mut wrapped_remove_logged_message_callback);
-    let mut wrapped_tagged_logged_string_message_callback = |tagged_message: &model::TaggedLoggedStringMessage| {
-        if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::TaggedLoggedMessage(&tagged_message))
-        {
-            stop_reading.set(true);
-        }
-    };
-    log_parser.set_tagged_logged_string_message_callback(&mut wrapped_tagged_logged_string_message_callback);
-    let mut wrapped_parameter_default_message_callback = |param_default_message: &model::ParameterDefaultMessage| {
-        if let SimpleCallbackResult::Stop =
-            c_cell.borrow_mut().deref_mut()(&Message::ParameterDefaultMessage(&param_default_message))
-        {
-            stop_reading.set(true);
-        }
-    };
-    log_parser.set_parameter_default_message_callback(&mut wrapped_parameter_default_message_callback);
+    let mut wrapped_tagged_logged_string_message_callback =
+        |tagged_message: &model::TaggedLoggedStringMessage| {
+            if let SimpleCallbackResult::Stop =
+                c_cell.borrow_mut().deref_mut()(&Message::TaggedLoggedMessage(tagged_message))
+            {
+                stop_reading.set(true);
+            }
+        };
+    log_parser.set_tagged_logged_string_message_callback(
+        &mut wrapped_tagged_logged_string_message_callback,
+    );
+    let mut wrapped_parameter_default_message_callback =
+        |param_default_message: &model::ParameterDefaultMessage| {
+            if let SimpleCallbackResult::Stop = c_cell.borrow_mut().deref_mut()(
+                &Message::ParameterDefaultMessage(param_default_message),
+            ) {
+                stop_reading.set(true);
+            }
+        };
+    log_parser
+        .set_parameter_default_message_callback(&mut wrapped_parameter_default_message_callback);
 
     let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
@@ -1227,7 +1242,11 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     let mut file_position: u64 = 0;
     while !stop_reading.get() {
         // Check if we need to limit the read to stop at the first appended offset
-        let first_appended = log_parser.appended_offsets().iter().copied().find(|&o| o != 0);
+        let first_appended = log_parser
+            .appended_offsets()
+            .iter()
+            .copied()
+            .find(|&o| o != 0);
         let max_read = if let Some(offset) = first_appended {
             if file_position >= offset {
                 break; // We've reached the appended region
@@ -1252,7 +1271,11 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     // The ULog spec allows up to 3 appended data sections for crash log recovery.
     // Each non-zero offset points to a file position where additional data begins.
     let appended_offsets = *log_parser.appended_offsets();
-    let non_zero_offsets: Vec<u64> = appended_offsets.iter().copied().filter(|&o| o != 0).collect();
+    let non_zero_offsets: Vec<u64> = appended_offsets
+        .iter()
+        .copied()
+        .filter(|&o| o != 0)
+        .collect();
     for (i, &offset) in non_zero_offsets.iter().enumerate() {
         if stop_reading.get() {
             break;

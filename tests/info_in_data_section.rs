@@ -85,7 +85,12 @@ fn test_info_after_data_messages() {
 
     let infos = collect_info_messages(&builder.build(), "test_info_after_data");
 
-    assert_eq!(infos.len(), 1, "expected 1 info message in data section, got {:?}", infos);
+    assert_eq!(
+        infos.len(),
+        1,
+        "expected 1 info message in data section, got {:?}",
+        infos
+    );
     assert_eq!(infos[0].0, "late_metadata");
     assert_eq!(infos[0].1, b"arrived_late");
 }
@@ -126,7 +131,12 @@ fn test_info_interleaved_with_data() {
 
     let infos = collect_info_messages(&builder.build(), "test_info_interleaved");
 
-    assert_eq!(infos.len(), 3, "expected 3 interleaved info messages, got {:?}", infos);
+    assert_eq!(
+        infos.len(),
+        3,
+        "expected 3 interleaved info messages, got {:?}",
+        infos
+    );
     assert_eq!(infos[0].0, "info_one");
     assert_eq!(infos[0].1, b"first");
     assert_eq!(infos[1].0, "info_two");
@@ -160,11 +170,16 @@ fn test_info_in_both_sections() {
 
     // Info in data section
     builder.info("char", "data_key", b"data_value");
-    builder.info("float", "data_float", &3.14f32.to_le_bytes());
+    builder.info("float", "data_float", &std::f32::consts::PI.to_le_bytes());
 
     let infos = collect_info_messages(&builder.build(), "test_info_both_sections");
 
-    assert_eq!(infos.len(), 4, "expected 4 info messages total, got {:?}", infos);
+    assert_eq!(
+        infos.len(),
+        4,
+        "expected 4 info messages total, got {:?}",
+        infos
+    );
 
     // Definitions section info
     assert_eq!(infos[0].0, "def_key");
@@ -176,5 +191,5 @@ fn test_info_in_both_sections() {
     assert_eq!(infos[2].0, "data_key");
     assert_eq!(infos[2].1, b"data_value");
     assert_eq!(infos[3].0, "data_float");
-    assert_eq!(infos[3].1, &3.14f32.to_le_bytes());
+    assert_eq!(infos[3].1, &std::f32::consts::PI.to_le_bytes());
 }

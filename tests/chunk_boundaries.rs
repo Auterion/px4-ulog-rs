@@ -56,13 +56,18 @@ fn test_header_split_across_two_chunks() {
     let bytes = build_test_stream(5);
     // Split header: first 8 bytes, then the rest
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
     parser.consume_bytes(&bytes[..8]).expect("first chunk ok");
     parser.consume_bytes(&bytes[8..]).expect("second chunk ok");
-    assert_eq!(count, 5, "All 5 data messages should parse after split header");
+    assert_eq!(
+        count, 5,
+        "All 5 data messages should parse after split header"
+    );
 }
 
 // =============================================================================
@@ -75,12 +80,18 @@ fn test_message_header_split_1_byte() {
     // Feed header (16 bytes), then split a message header at 1 byte
     let split_point = 16 + 1; // 1 byte into first message header
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
-    parser.consume_bytes(&bytes[..split_point]).expect("first chunk ok");
-    parser.consume_bytes(&bytes[split_point..]).expect("second chunk ok");
+    parser
+        .consume_bytes(&bytes[..split_point])
+        .expect("first chunk ok");
+    parser
+        .consume_bytes(&bytes[split_point..])
+        .expect("second chunk ok");
     assert_eq!(count, 3);
 }
 
@@ -89,12 +100,18 @@ fn test_message_header_split_2_bytes() {
     let bytes = build_test_stream(3);
     let split_point = 16 + 2; // 2 bytes into first message header
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
-    parser.consume_bytes(&bytes[..split_point]).expect("first chunk ok");
-    parser.consume_bytes(&bytes[split_point..]).expect("second chunk ok");
+    parser
+        .consume_bytes(&bytes[..split_point])
+        .expect("first chunk ok");
+    parser
+        .consume_bytes(&bytes[split_point..])
+        .expect("second chunk ok");
     assert_eq!(count, 3);
 }
 
@@ -109,12 +126,18 @@ fn test_message_body_split() {
     // Split in the middle of the first format message body
     let split_point = 59 + 5;
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
-    parser.consume_bytes(&bytes[..split_point]).expect("first chunk ok");
-    parser.consume_bytes(&bytes[split_point..]).expect("second chunk ok");
+    parser
+        .consume_bytes(&bytes[..split_point])
+        .expect("first chunk ok");
+    parser
+        .consume_bytes(&bytes[split_point..])
+        .expect("second chunk ok");
     assert_eq!(count, 3);
 }
 
@@ -148,7 +171,9 @@ fn test_all_in_one_chunk() {
 fn test_large_chunk_then_empty() {
     let bytes = build_test_stream(5);
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
@@ -169,7 +194,9 @@ fn test_random_chunk_sizes() {
     let mut state: u32 = 42;
     let mut offset = 0;
     let mut count = 0;
-    let mut cb = |_: &DataMessage| { count += 1; };
+    let mut cb = |_: &DataMessage| {
+        count += 1;
+    };
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut cb);
 
@@ -182,7 +209,10 @@ fn test_random_chunk_sizes() {
             .expect("chunk should parse ok");
         offset = end;
     }
-    assert_eq!(count, 20, "Random chunk sizes should still parse all 20 messages");
+    assert_eq!(
+        count, 20,
+        "Random chunk sizes should still parse all 20 messages"
+    );
 }
 
 // =============================================================================
@@ -209,15 +239,15 @@ fn test_chunk_sizes_sweep() {
 
 #[test]
 fn test_sample_ulg_chunk_sizes() {
-    let path = format!(
-        "{}/tests/fixtures/sample.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let path = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
     let bytes = std::fs::read(&path).unwrap();
 
     // Parse with a large chunk (simulates normal read)
     let baseline = parse_in_chunks(&bytes, 1024 * 1024);
-    assert!(baseline > 0, "Should parse some data messages from sample.ulg");
+    assert!(
+        baseline > 0,
+        "Should parse some data messages from sample.ulg"
+    );
 
     // Parse with small chunks — should get the same count
     for chunk_size in [64, 256, 1024, 4096, 65536] {

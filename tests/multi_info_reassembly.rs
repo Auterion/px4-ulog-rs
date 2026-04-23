@@ -13,9 +13,7 @@ use px4_ulog::stream_parser::model::ReassembledMultiInfoMessage;
 
 /// Helper: build a minimal ULog byte stream with flag bits, then append
 /// multi-info messages and parse them, collecting reassembled results.
-fn parse_multi_info_messages(
-    build_fn: impl FnOnce(&mut ULogBuilder),
-) -> Vec<(String, Vec<u8>)> {
+fn parse_multi_info_messages(build_fn: impl FnOnce(&mut ULogBuilder)) -> Vec<(String, Vec<u8>)> {
     let mut builder = ULogBuilder::new();
     builder.flag_bits();
     build_fn(&mut builder);

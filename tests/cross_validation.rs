@@ -5,7 +5,9 @@
 
 use px4_ulog::full_parser;
 use px4_ulog::full_parser::SomeVec;
-use px4_ulog::stream_parser::file_reader::{read_file_with_simple_callback, Message, SimpleCallbackResult};
+use px4_ulog::stream_parser::file_reader::{
+    read_file_with_simple_callback, Message, SimpleCallbackResult,
+};
 use px4_ulog::stream_parser::model::{MultiId, ParameterMessage};
 
 fn somevec_len(v: &SomeVec) -> usize {
@@ -100,13 +102,17 @@ fn test_cross_validate_message_counts_full_parser() {
         }
     }
 
-    assert_eq!(total_parsed, 64542, "Total data messages should match pyulog");
+    assert_eq!(
+        total_parsed, 64542,
+        "Total data messages should match pyulog"
+    );
 }
 
 #[test]
 fn test_cross_validate_message_counts_stream_parser() {
     let path = fixture_path("sample.ulg");
-    let mut topic_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut topic_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
 
     read_file_with_simple_callback(&path, &mut |msg| {
         if let Message::Data(data_msg) = msg {
@@ -123,8 +129,14 @@ fn test_cross_validate_message_counts_stream_parser() {
     assert!(total > 60000, "Expected >60K data messages, got {}", total);
 
     // Verify key topics are present
-    assert!(topic_counts.contains_key("sensor_combined"), "sensor_combined should be present");
-    assert!(topic_counts.contains_key("vehicle_attitude"), "vehicle_attitude should be present");
+    assert!(
+        topic_counts.contains_key("sensor_combined"),
+        "sensor_combined should be present"
+    );
+    assert!(
+        topic_counts.contains_key("vehicle_attitude"),
+        "vehicle_attitude should be present"
+    );
 }
 
 // =============================================================================
@@ -214,7 +226,11 @@ fn test_cross_validate_start_timestamp() {
     let data = std::fs::read(&path).unwrap();
     let mut parser = LogParser::default();
     parser.consume_bytes(&data).unwrap();
-    assert_eq!(parser.timestamp(), 112500176, "Start timestamp should match pyulog");
+    assert_eq!(
+        parser.timestamp(),
+        112500176,
+        "Start timestamp should match pyulog"
+    );
 }
 
 // =============================================================================
@@ -228,11 +244,7 @@ fn test_cross_validate_topic_list() {
     let names: Vec<&String> = parsed.messages.keys().collect();
 
     // full_parser only includes topics with actual data messages
-    let expected_topics = [
-        "sensor_combined",
-        "vehicle_attitude",
-        "estimator_status",
-    ];
+    let expected_topics = ["sensor_combined", "vehicle_attitude", "estimator_status"];
     for topic in &expected_topics {
         assert!(
             names.iter().any(|n| n.as_str() == *topic),
@@ -279,7 +291,9 @@ fn test_cross_validate_esc_status() {
     let fields = esc.get(&MultiId::new(0)).unwrap();
 
     // ESC status should have nested fields like esc[0].esc_rpm
-    let has_nested = fields.keys().any(|k| k.contains("esc[") && k.contains("].esc_"));
+    let has_nested = fields
+        .keys()
+        .any(|k| k.contains("esc[") && k.contains("].esc_"));
     assert!(
         has_nested,
         "esc_status should have nested fields like esc[N].esc_rpm, found: {:?}",

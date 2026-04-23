@@ -11,10 +11,10 @@ use std::iter::*;
 /// assert_eq!(unpack::as_u64_le(&arr), 283686952306183);
 /// ```
 pub fn as_u64_le(arr: &[u8]) -> u64 {
-        arr.iter()
-                .enumerate()
-                .map(|(i, v)| (v.clone() as u64) << (8 * i))
-                .sum()
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| (*v as u64) << (8 * i))
+        .sum()
 }
 
 /// Convert a array of four u8 elements into a u32
@@ -27,10 +27,10 @@ pub fn as_u64_le(arr: &[u8]) -> u64 {
 /// assert_eq!(unpack::as_u32_le(&arr), 258);
 /// ```
 pub fn as_u32_le(arr: &[u8]) -> u32 {
-        arr.iter()
-                .enumerate()
-                .map(|(i, v)| (v.clone() as u32) << (8 * i))
-                .sum()
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| (*v as u32) << (8 * i))
+        .sum()
 }
 
 /// Convert a array of four u8 elements into a i32
@@ -43,7 +43,7 @@ pub fn as_u32_le(arr: &[u8]) -> u32 {
 /// assert_eq!(unpack::as_i32_le(&arr), -16777215);
 /// ```
 pub fn as_i32_le(arr: &[u8]) -> i32 {
-        as_u32_le(arr) as i32
+    as_u32_le(arr) as i32
 }
 
 /// Convert a array of two u8 elements into a u16
@@ -56,10 +56,10 @@ pub fn as_i32_le(arr: &[u8]) -> i32 {
 /// assert_eq!(unpack::as_u16_le(&arr), 512);
 /// ```
 pub fn as_u16_le(arr: &[u8]) -> u16 {
-        arr.iter()
-                .enumerate()
-                .map(|(i, v)| (v.clone() as u16) << (8 * i))
-                .sum()
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| (*v as u16) << (8 * i))
+        .sum()
 }
 
 /// Convert a array of four u8 elements into a f32
@@ -72,7 +72,7 @@ pub fn as_u16_le(arr: &[u8]) -> u16 {
 /// assert_eq!(unpack::as_f32_le(&arr), 0.0);
 /// ```
 pub fn as_f32_le(arr: &[u8]) -> f32 {
-        f32::from_bits(as_u32_le(arr))
+    f32::from_bits(as_u32_le(arr))
 }
 
 /// Convert a u8 slice to a string
@@ -84,5 +84,5 @@ pub fn as_f32_le(arr: &[u8]) -> f32 {
 /// assert_eq!(unpack::as_str(&arr).unwrap(), "Hello");
 /// ```
 pub fn as_str(arr: &[u8]) -> Result<&str> {
-        std::str::from_utf8(arr).map_err(|_| Error::new(ErrorKind::Other, "data is not a string"))
+    std::str::from_utf8(arr).map_err(|_| Error::new(ErrorKind::Other, "data is not a string"))
 }

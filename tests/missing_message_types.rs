@@ -15,18 +15,18 @@
 //! That is intentional -- this is TDD.
 //!
 //! Implementation checklist:
-//!   1. Add new variants to `Message` enum in file_reader.rs:
-//!        InfoMessage(&'a InfoMessage<'a>)
-//!        MultiInfoMessage(&'a MultiInfoMessage<'a>)
-//!        DropoutMessage(&'a DropoutMessage)
-//!        SyncMessage(&'a SyncMessage)
-//!        RemoveLoggedMessage(&'a RemoveLoggedMsg)
-//!        TaggedLoggedMessage(&'a TaggedLoggedStringMessage<'a>)
-//!        ParameterDefaultMessage(&'a ParameterDefaultMessage<'a>)
+//! 1. Add new variants to `Message` enum in file_reader.rs:
+//!    InfoMessage(&'a InfoMessage<'a>)
+//!    MultiInfoMessage(&'a MultiInfoMessage<'a>)
+//!    DropoutMessage(&'a DropoutMessage)
+//!    SyncMessage(&'a SyncMessage)
+//!    RemoveLoggedMessage(&'a RemoveLoggedMsg)
+//!    TaggedLoggedMessage(&'a TaggedLoggedStringMessage<'a>)
+//!    ParameterDefaultMessage(&'a ParameterDefaultMessage<'a>)
 //!
-//!   2. Add corresponding structs to model.rs.
+//! 2. Add corresponding structs to model.rs.
 //!
-//!   3. Add callbacks to LogParser and wire them through `parse_message`.
+//! 3. Add callbacks to LogParser and wire them through `parse_message`.
 //!
 //!   4. Wire the new callbacks through `read_file_with_simple_callback`.
 
@@ -285,7 +285,7 @@ fn test_multi_info_message_synthetic() {
             Message::SyncMessage(_) => {}
             Message::MultiInfoMessage(mi) => {
                 multi_info_count += 1;
-                assert_eq!(mi.is_continued, false);
+                assert!(!mi.is_continued);
                 assert_eq!(mi.key, "replay");
             }
             Message::RemoveLoggedMessage(_) => {}
@@ -836,7 +836,10 @@ fn test_parameter_default_i32_synthetic() {
          The parser needs a new Message::ParameterDefaultMessage variant."
     );
     let (default_types, name, value) = &param_defaults[0];
-    assert_eq!(*default_types, 0x01, "default_types should be 0x01 (system default)");
+    assert_eq!(
+        *default_types, 0x01,
+        "default_types should be 0x01 (system default)"
+    );
     assert_eq!(name, "SYS_AUTOSTART");
     assert_eq!(*value, 4001);
 
@@ -882,7 +885,10 @@ fn test_parameter_default_current_config() {
         1,
         "ParameterDefault with current-config type was silently dropped."
     );
-    assert_eq!(param_defaults[0].0, 0x02, "default_types should be 0x02 (current config)");
+    assert_eq!(
+        param_defaults[0].0, 0x02,
+        "default_types should be 0x02 (current config)"
+    );
     assert_eq!(param_defaults[0].1, "MC_PITCHRATE_P");
 
     let _ = std::fs::remove_file(&tmp);
@@ -950,10 +956,19 @@ fn test_all_ignored_types_in_one_stream() {
 
     // All ignored types should now be surfaced.
     assert_eq!(info_count, 1, "Info message should not be silently dropped");
-    assert_eq!(dropout_count, 1, "Dropout message should not be silently dropped");
+    assert_eq!(
+        dropout_count, 1,
+        "Dropout message should not be silently dropped"
+    );
     assert_eq!(sync_count, 1, "Sync message should not be silently dropped");
-    assert_eq!(remove_count, 1, "RemoveLoggedMessage should not be silently dropped");
-    assert_eq!(tagged_count, 1, "TaggedLoggedString should not be silently dropped");
+    assert_eq!(
+        remove_count, 1,
+        "RemoveLoggedMessage should not be silently dropped"
+    );
+    assert_eq!(
+        tagged_count, 1,
+        "TaggedLoggedString should not be silently dropped"
+    );
     assert_eq!(
         param_default_count, 1,
         "ParameterDefault should not be silently dropped"
