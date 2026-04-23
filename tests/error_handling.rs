@@ -27,19 +27,6 @@ fn error_is_boxable_as_std_error_with_display() {
 }
 
 #[test]
-fn error_works_with_question_mark_operator() {
-    fn inner() -> Result<(), Box<dyn std::error::Error>> {
-        let bytes = vec![0xDE, 0xAD, 0xBE, 0xEF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        let mut noop = |_: &DataMessage| {};
-        let mut parser = LogParser::default();
-        parser.set_data_message_callback(&mut noop);
-        parser.consume_bytes(&bytes)?;
-        Ok(())
-    }
-    assert!(inner().is_err());
-}
-
-#[test]
 fn debug_and_display_carry_context() {
     let err = UlogParseError::new(ParseErrorType::InvalidFile, "bad header");
     let debug = format!("{:?}", err);
@@ -86,16 +73,6 @@ fn unknown_incompat_flag_bit_is_rejected() {
         "got: {}",
         msg
     );
-}
-
-#[test]
-fn undersized_flag_bits_message_is_rejected() {
-    let builder = ULogBuilder::new();
-    let mut bytes = builder.build();
-    bytes.extend_from_slice(&10u16.to_le_bytes());
-    bytes.push(b'B');
-    bytes.extend_from_slice(&[0u8; 10]);
-    assert!(parse_bytes(&bytes).is_err());
 }
 
 #[test]

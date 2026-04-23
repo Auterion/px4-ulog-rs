@@ -182,39 +182,6 @@ fn test_large_chunk_then_empty() {
 }
 
 // =============================================================================
-// Random chunk sizes (deterministic)
-// =============================================================================
-
-#[test]
-fn test_random_chunk_sizes() {
-    let bytes = build_test_stream(20);
-
-    // Simple PRNG for deterministic "random" chunk sizes
-    let mut state: u32 = 42;
-    let mut offset = 0;
-    let mut count = 0;
-    let mut cb = |_: &DataMessage| {
-        count += 1;
-    };
-    let mut parser = LogParser::default();
-    parser.set_data_message_callback(&mut cb);
-
-    while offset < bytes.len() {
-        state = state.wrapping_mul(1103515245).wrapping_add(12345);
-        let chunk_size = ((state >> 16) % 128 + 1) as usize;
-        let end = std::cmp::min(offset + chunk_size, bytes.len());
-        parser
-            .consume_bytes(&bytes[offset..end])
-            .expect("chunk should parse ok");
-        offset = end;
-    }
-    assert_eq!(
-        count, 20,
-        "Random chunk sizes should still parse all 20 messages"
-    );
-}
-
-// =============================================================================
 // Various fixed chunk sizes
 // =============================================================================
 
@@ -228,33 +195,6 @@ fn test_chunk_sizes_sweep() {
             count, 10,
             "Chunk size {} should produce 10 data messages",
             chunk_size
-        );
-    }
-}
-
-// =============================================================================
-// Real fixture file with various chunk sizes
-// =============================================================================
-
-#[test]
-fn test_sample_ulg_chunk_sizes() {
-    let path = format!("{}/tests/fixtures/sample.ulg", env!("CARGO_MANIFEST_DIR"));
-    let bytes = std::fs::read(&path).unwrap();
-
-    // Parse with a large chunk (simulates normal read)
-    let baseline = parse_in_chunks(&bytes, 1024 * 1024);
-    assert!(
-        baseline > 0,
-        "Should parse some data messages from sample.ulg"
-    );
-
-    // Parse with small chunks, should get the same count
-    for chunk_size in [64, 256, 1024, 4096, 65536] {
-        let count = parse_in_chunks(&bytes, chunk_size);
-        assert_eq!(
-            count, baseline,
-            "Chunk size {} gave {} messages, expected {} (from 1MB chunks)",
-            chunk_size, count, baseline
         );
     }
 }

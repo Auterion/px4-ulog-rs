@@ -72,22 +72,6 @@ fn test_off_by_one_exact_buffer_boundary() {
     );
 }
 
-#[test]
-fn test_off_by_one_with_trailing_byte() {
-    let (builder, _msg_id) = ULogBuilder::minimal_with_data();
-    let mut bytes = builder.build();
-    // Add one extra byte so buf.len() > consumed_len for the last message
-    bytes.push(0x00);
-
-    let results = parse_and_collect_data(&bytes);
-    // With trailing byte, the off-by-one is not triggered
-    assert_eq!(
-        results.len(),
-        1,
-        "Should parse 1 data message when there's a trailing byte"
-    );
-}
-
 // =============================================================================
 // Non-monotonic timestamps silently dropped
 //

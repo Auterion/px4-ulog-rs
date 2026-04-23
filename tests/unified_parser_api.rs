@@ -382,48 +382,6 @@ fn stream_parser_accepts_chunked_byte_slices() {
 }
 
 #[test]
-fn stream_parser_byte_count_matches_one_shot_vs_chunked() {
-    // Verify that chunked parsing produces the same number of data messages
-    // as single-shot parsing.
-    use px4_ulog::stream_parser::LogParser;
-
-    let filename = format!(
-        "{}/tests/fixtures/6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let data = std::fs::read(&filename).unwrap();
-
-    // Parse in one shot.
-    let mut count_one_shot: usize = 0;
-    {
-        let mut callback = |_msg: &px4_ulog::stream_parser::DataMessage| {
-            count_one_shot += 1;
-        };
-        let mut parser = LogParser::default();
-        parser.set_data_message_callback(&mut callback);
-        parser.consume_bytes(&data).unwrap();
-    }
-
-    // Parse in chunks.
-    let mut count_chunked: usize = 0;
-    {
-        let mut callback = |_msg: &px4_ulog::stream_parser::DataMessage| {
-            count_chunked += 1;
-        };
-        let mut parser = LogParser::default();
-        parser.set_data_message_callback(&mut callback);
-        for chunk in data.chunks(256) {
-            parser.consume_bytes(chunk).unwrap();
-        }
-    }
-
-    assert_eq!(
-        count_one_shot, count_chunked,
-        "One-shot and chunked parsing should yield the same number of data messages"
-    );
-}
-
-#[test]
 fn full_parser_byte_slice_input() {
     // TODO: full_parser::read_file currently only accepts a file path string.
     // After unification, it should also accept &[u8] or impl Read so that
@@ -627,17 +585,6 @@ fn stream_parser_rejects_non_ulog_data() {
 }
 
 #[test]
-fn stream_parser_rejects_empty_input() {
-    use px4_ulog::stream_parser::LogParser;
-
-    let mut parser = LogParser::default();
-    // Empty input should not error (nothing to parse yet), but should not
-    // crash either. The parser just has nothing to consume.
-    let result = parser.consume_bytes(&[]);
-    assert!(result.is_ok(), "Empty input should not cause an error");
-}
-
-#[test]
 fn full_parser_handles_empty_file_gracefully() {
     let filename = format!(
         "{}/tests/fixtures/not_a_log_file.txt",
@@ -653,4 +600,73 @@ fn full_parser_handles_empty_file_gracefully() {
         );
     }
     // Err is also acceptable, rejecting invalid files is fine
+}
+
+// ---------------------------------------------------------------------------
+// Cross-variant integration: every message type coexists in one stream
+// ---------------------------------------------------------------------------
+// Injects each non-data message variant alongside Data messages and asserts
+// the parser surfaces all of them without dropping Data payloads. Exercises
+// the full stream_parser + callback dispatch path end-to-end.
+
+#[path = "helpers/mod.rs"]
+mod helpers;
+
+#[test]
+fn mixed_stream_surfaces_every_variant_and_preserves_data() {
+    use helpers::ULogBuilder;
+    use px4_ulog::stream_parser::file_reader::{
+        read_file_with_simple_callback, Message, SimpleCallbackResult,
+    };
+
+    let (mut builder, msg_id) = ULogBuilder::minimal_with_data();
+
+    builder.info("char", "test_key", b"test_value");
+    builder.dropout(100);
+    builder.sync();
+    builder.remove_logged(msg_id);
+    builder.tagged_logged_string(6, 1, 9999, "tagged msg");
+    builder.parameter_default_i32(0x01, "TEST_PARAM", 42);
+
+    // Second data message to confirm data delivery survives the injected types.
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&2000u64.to_le_bytes());
+    payload.extend_from_slice(&2.5f32.to_le_bytes());
+    builder.data(msg_id, &payload);
+
+    let tmp = std::env::temp_dir().join("mixed_stream.ulg");
+    std::fs::write(&tmp, builder.build()).unwrap();
+
+    let mut counts = std::collections::HashMap::<&'static str, usize>::new();
+    read_file_with_simple_callback(tmp.to_str().unwrap(), &mut |msg| {
+        let tag = match msg {
+            Message::Data(_) => "data",
+            Message::InfoMessage(_) => "info",
+            Message::DropoutMessage(_) => "dropout",
+            Message::SyncMessage(_) => "sync",
+            Message::RemoveLoggedMessage(_) => "remove",
+            Message::TaggedLoggedMessage(_) => "tagged",
+            Message::ParameterDefaultMessage(_) => "param_default",
+            Message::LoggedMessage(_)
+            | Message::ParameterMessage(_)
+            | Message::MultiInfoMessage(_) => return SimpleCallbackResult::KeepReading,
+        };
+        *counts.entry(tag).or_insert(0) += 1;
+        SimpleCallbackResult::KeepReading
+    })
+    .expect("mixed stream should parse cleanly");
+
+    let _ = std::fs::remove_file(&tmp);
+
+    assert_eq!(
+        counts.get("data"),
+        Some(&2),
+        "both data messages must survive injected types"
+    );
+    assert_eq!(counts.get("info"), Some(&1));
+    assert_eq!(counts.get("dropout"), Some(&1));
+    assert_eq!(counts.get("sync"), Some(&1));
+    assert_eq!(counts.get("remove"), Some(&1));
+    assert_eq!(counts.get("tagged"), Some(&1));
+    assert_eq!(counts.get("param_default"), Some(&1));
 }

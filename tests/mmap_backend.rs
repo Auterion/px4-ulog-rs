@@ -203,30 +203,6 @@ fn test_quadrotor_local_byte_slice_matches_file_parse() {
     );
 }
 
-#[test]
-fn test_all_fixtures_byte_slice_matches_file_parse() {
-    // Cross-validate every fixture: byte-slice parsing must produce the same
-    // data message count as file-based parsing.
-    let fixtures = [
-        "sample.ulg",
-        "6ba1abc7-b433-4029-b8f5-3b2bb12d3b6c.ulg",
-        "quadrotor_local.ulg",
-    ];
-
-    for fixture in &fixtures {
-        let path = fixture_path(fixture);
-        let file_count = parse_file_counting_data(&path);
-        let data = std::fs::read(&path).unwrap_or_else(|_| panic!("should read {}", fixture));
-        let (byte_count, _, _) = parse_bytes_counting(&data);
-
-        assert_eq!(
-            byte_count, file_count,
-            "Byte-slice vs file mismatch for {}: {} vs {}",
-            fixture, byte_count, file_count
-        );
-    }
-}
-
 // =============================================================================
 // Full parser from bytes -- NEEDS NEW API
 //

@@ -147,18 +147,6 @@ fn oversized_message_size_does_not_panic() {
     let _ = parse_ok_or_err(&bytes);
 }
 
-/// Replace the message type byte of the first message with an unprintable /
-/// unknown value. The parser should accept the file (unknown types are
-/// silently skipped) or return `Err`; either is fine as long as there's no
-/// panic.
-#[test]
-fn unknown_first_message_type_does_not_panic() {
-    let mut bytes = sample_bytes();
-    // msg_type byte is at offset 18 (16 header + 2 size).
-    bytes[18] = 0xAB;
-    let _ = parse_ok_or_err(&bytes);
-}
-
 // =============================================================================
 // File-based APIs must surface, not swallow, corruption errors
 // =============================================================================

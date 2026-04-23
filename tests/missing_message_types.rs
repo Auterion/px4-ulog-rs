@@ -5,8 +5,8 @@
 //!
 //! MultiInfo fragment reassembly is covered by tests/multi_info_reassembly.rs
 //! and RemoveLogged semantics by tests/remove_logged_semantics.rs, so those
-//! variants are only exercised here through the combined-stream integration
-//! test.
+//! variants get only surface-level coverage here. The cross-variant
+//! integration test lives in tests/unified_parser_api.rs.
 
 mod helpers;
 
@@ -246,62 +246,4 @@ fn parameter_default_surfaces_system_and_current_config_flags() {
             (0x02, "MC_PITCHRATE_P".to_string(), 150),
         ]
     );
-}
-
-// =============================================================================
-// Integration: every message type coexists in one stream without corruption
-// =============================================================================
-
-#[test]
-fn mixed_stream_surfaces_every_variant_and_preserves_data() {
-    let (mut builder, msg_id) = ULogBuilder::minimal_with_data();
-
-    builder.info("char", "test_key", b"test_value");
-    builder.dropout(100);
-    builder.sync();
-    builder.remove_logged(msg_id);
-    builder.tagged_logged_string(6, 1, 9999, "tagged msg");
-    builder.parameter_default_i32(0x01, "TEST_PARAM", 42);
-
-    // Second data message to confirm data delivery survives the injected types.
-    let mut payload = Vec::new();
-    payload.extend_from_slice(&2000u64.to_le_bytes());
-    payload.extend_from_slice(&2.5f32.to_le_bytes());
-    builder.data(msg_id, &payload);
-
-    let tmp = std::env::temp_dir().join("mixed_stream.ulg");
-    std::fs::write(&tmp, builder.build()).unwrap();
-
-    let mut counts = std::collections::HashMap::<&'static str, usize>::new();
-    read_file_with_simple_callback(tmp.to_str().unwrap(), &mut |msg| {
-        let tag = match msg {
-            Message::Data(_) => "data",
-            Message::InfoMessage(_) => "info",
-            Message::DropoutMessage(_) => "dropout",
-            Message::SyncMessage(_) => "sync",
-            Message::RemoveLoggedMessage(_) => "remove",
-            Message::TaggedLoggedMessage(_) => "tagged",
-            Message::ParameterDefaultMessage(_) => "param_default",
-            Message::LoggedMessage(_)
-            | Message::ParameterMessage(_)
-            | Message::MultiInfoMessage(_) => return SimpleCallbackResult::KeepReading,
-        };
-        *counts.entry(tag).or_insert(0) += 1;
-        SimpleCallbackResult::KeepReading
-    })
-    .expect("mixed stream should parse cleanly");
-
-    let _ = std::fs::remove_file(&tmp);
-
-    assert_eq!(
-        counts.get("data"),
-        Some(&2),
-        "both data messages must survive injected types"
-    );
-    assert_eq!(counts.get("info"), Some(&1));
-    assert_eq!(counts.get("dropout"), Some(&1));
-    assert_eq!(counts.get("sync"), Some(&1));
-    assert_eq!(counts.get("remove"), Some(&1));
-    assert_eq!(counts.get("tagged"), Some(&1));
-    assert_eq!(counts.get("param_default"), Some(&1));
 }
