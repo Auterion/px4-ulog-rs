@@ -1,6 +1,6 @@
 // Benchmark harness for PX4/ulog_cpp. Reads a ULog file N times through the
 // streaming reader and prints min/mean elapsed milliseconds plus throughput.
-// Invoked by scripts/benchmark_compare.sh.
+// Invoked by benchmark/benchmark_compare.sh.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 

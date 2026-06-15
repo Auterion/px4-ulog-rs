@@ -1,6 +1,6 @@
 // Parse every ULog file reachable from a path list or a directory walk and
 // report the outcome per file. Useful for corpus regression testing and for
-// cross-checking against another parser (pair with scripts/ulog_cpp_check
+// cross-checking against another parser (pair with benchmark/ulog_cpp_check
 // and diff the outputs).
 //
 // Input modes (subcommands):

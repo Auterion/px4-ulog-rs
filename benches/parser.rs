@@ -2,7 +2,7 @@
 //!
 //! `cargo bench` here answers "did a change regress parsing throughput?" with
 //! statistical rigor. The apples-to-apples comparison against ulog_cpp and
-//! pyulog lives in `examples/bench.rs` / `scripts/benchmark_compare.sh`, which
+//! pyulog lives in `examples/bench.rs` / `benchmark/benchmark_compare.sh`, which
 //! measure raw wall-clock the same way those tools do.
 //!
 //! Fixtures that are not present are skipped rather than failing the run, so a

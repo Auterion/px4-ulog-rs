@@ -14,7 +14,7 @@
 # opt out.
 #
 # Usage:
-#   ./scripts/benchmark_compare.sh [--skip-cpp] [--skip-python]
+#   ./benchmark/benchmark_compare.sh [--skip-cpp] [--skip-python]
 
 set -e
 
