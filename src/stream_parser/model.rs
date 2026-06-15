@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 
+/// The kind of a ULog message, decoded from its one-byte type tag.
 #[derive(Debug, PartialEq)]
 pub enum MessageType {
     Unknown,
@@ -21,6 +22,7 @@ pub enum MessageType {
     FlagBits,
 }
 
+/// A single raw ULog message: its type tag plus the payload bytes.
 pub struct ULogMessage<'a> {
     msg_type: u8,
     pub data: &'a [u8],
@@ -65,6 +67,7 @@ impl<'a> ULogMessage<'a> {
     }
 }
 
+/// The scalar type of a flattened message field.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FlattenedFieldType {
     Int8,
@@ -81,6 +84,7 @@ pub enum FlattenedFieldType {
     Char,
 }
 
+/// A single decoded field value, tagged with its scalar type.
 #[derive(Clone, Debug)]
 pub enum FlattenedFieldValue {
     Int8(i8),
@@ -97,6 +101,7 @@ pub enum FlattenedFieldValue {
     Char(char),
 }
 
+/// Instance index distinguishing multiple subscriptions to the same topic.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct MultiId(u8);
 
@@ -109,6 +114,8 @@ impl MultiId {
     }
 }
 
+/// One field of a flattened message format: its name, type, and byte offset
+/// within the message payload.
 #[derive(Clone, Debug)]
 pub struct FlattenedField {
     pub flattened_field_name: String,
@@ -116,6 +123,7 @@ pub struct FlattenedField {
     pub offset: u16, // relative to the beginning of the message ()
 }
 
+/// The uint64 microsecond timestamp field of a message, located by byte offset.
 #[derive(Clone, Debug)]
 pub struct TimestampField {
     pub offset: u16, // relative to the beginning of the message
@@ -128,12 +136,14 @@ impl TimestampField {
     }
 }
 
+/// Why a field lookup failed: the field is absent, or present with another type.
 #[derive(Debug)]
 pub enum FieldLookupError {
     MissingField,
     TypeMismatch,
 }
 
+/// An error encountered while parsing a ULog stream.
 #[derive(Debug)]
 pub struct UlogParseError {
     pub error_type: ParseErrorType,
@@ -149,6 +159,7 @@ impl UlogParseError {
     }
 }
 
+/// Broad category of a [`UlogParseError`].
 #[derive(Debug)]
 pub enum ParseErrorType {
     InvalidFile,
@@ -172,6 +183,8 @@ impl fmt::Display for UlogParseError {
 
 impl std::error::Error for UlogParseError {}
 
+/// A message format flattened into its concrete fields, with offsets resolved
+/// and the timestamp field (if any) identified. Used to decode Data messages.
 #[derive(Clone, Debug)]
 pub struct FlattenedFormat {
     pub message_name: String,
@@ -181,6 +194,8 @@ pub struct FlattenedFormat {
     size: u16,
 }
 
+/// A scalar type that can be decoded from a field and matched against a
+/// [`FlattenedFieldType`].
 pub trait ParseableFieldType: LittleEndianParser + FlattenedFieldTypeMatcher {}
 
 // Universal impl
@@ -260,6 +275,7 @@ impl FlattenedFormat {
     }
 }
 
+/// A reusable decoder for one typed field at a fixed offset within a message.
 pub struct FieldParser<T: ParseableFieldType> {
     offset: u16, // relative to the beginning of the message ()
     _phantom: PhantomData<T>,
@@ -275,6 +291,8 @@ impl<T: ParseableFieldType> FieldParser<T> {
     }
 }
 
+/// A logged data sample: the subscription it belongs to, its format, and the
+/// raw payload (including the leading msg_id bytes).
 pub struct DataMessage<'a> {
     pub msg_id: u16,
     pub multi_id: MultiId,
@@ -282,39 +300,54 @@ pub struct DataMessage<'a> {
     pub data: &'a [u8], // this includes the bytes of the msg_id.
 }
 
+/// Which section of the log a message appeared in: the definitions header or
+/// the data section.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LogStage {
     Definitions,
     Data,
 }
 
+/// A parameter value, tagged with the section it appeared in (initial value in
+/// definitions, or a mid-log change in the data section).
 #[derive(Debug)]
 pub enum ParameterMessage<'a> {
     Float(&'a str, f32, LogStage),
     Int32(&'a str, i32, LogStage),
 }
 
+/// A human-readable log string with its severity level and timestamp.
 pub struct LoggedStringMessage<'a> {
     pub log_level: u8,
     pub timestamp: u64,
     pub logged_message: &'a str,
 }
 
+/// A key/value information message. The key in the file is a typed declaration
+/// `"type name"` (e.g. `char[10] sys_name`); `type_str` is the type portion and
+/// `key` the name. Consumers use `type_str` to interpret the raw `value` bytes.
 pub struct InfoMessage<'a> {
+    pub type_str: &'a str,
     pub key: &'a str,
     pub value: &'a [u8],
 }
 
+/// A logging dropout: a gap of `duration_ms` milliseconds where data was lost.
 pub struct DropoutMessage {
     pub duration_ms: u16,
 }
 
+/// A synchronization marker used to resynchronize after corruption.
 pub struct SyncMessage {
     pub magic: [u8; 8],
 }
 
+/// One fragment of a multi-value information message. Like [`InfoMessage`], the
+/// key is a typed declaration; `type_str` is the type portion and `key` the name.
+/// `is_continued` is true when more fragments for this key follow.
 pub struct MultiInfoMessage<'a> {
     pub is_continued: bool,
+    pub type_str: &'a str,
     pub key: &'a str,
     pub value: &'a [u8],
 }
@@ -327,10 +360,12 @@ pub struct ReassembledMultiInfoMessage {
     pub value: Vec<u8>,
 }
 
+/// Marks a previously-subscribed message id as removed (no further data).
 pub struct RemoveLoggedMessage {
     pub msg_id: u16,
 }
 
+/// A logged string carrying an extra `tag` identifying its source/category.
 pub struct TaggedLoggedStringMessage<'a> {
     pub log_level: u8,
     pub tag: u16,
@@ -338,6 +373,8 @@ pub struct TaggedLoggedStringMessage<'a> {
     pub logged_message: &'a str,
 }
 
+/// A parameter's default value, with `default_types` flags indicating which
+/// default scopes (system / current setup) it applies to.
 #[derive(Debug)]
 pub enum ParameterDefaultMessage<'a> {
     Float(&'a str, f32, u8),

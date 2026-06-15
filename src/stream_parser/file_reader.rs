@@ -330,6 +330,8 @@ impl<'c> LogParser<'c> {
     fn parse_message(&mut self, msg: model::ULogMessage) -> Result<(), UlogParseError> {
         match msg.msg_type() {
             model::MessageType::FlagBits => {
+                // The spec requires the FlagBits message to be the first message
+                // immediately after the header, i.e. while status is AfterHeader.
                 if self.status != ParseStatus::AfterHeader {
                     return Err(UlogParseError::new(
                         ParseErrorType::Other,
@@ -550,11 +552,13 @@ impl<'c> LogParser<'c> {
                         "Info message key is not valid UTF-8",
                     )
                 })?;
-                // Key format is "type[size] name", extract just the name part
-                let key_name = key.split(' ').next_back().unwrap_or(key);
+                // Key format is "type name" (e.g. "char[10] sys_name"); split it
+                // into the type and the name, keeping both.
+                let (type_str, key_name) = split_info_key(key);
                 let value = &msg.data[(1 + key_len)..];
                 if let Some(cb) = &mut self.info_message_callback {
                     cb(&InfoMessage {
+                        type_str,
                         key: key_name,
                         value,
                     });
@@ -583,34 +587,36 @@ impl<'c> LogParser<'c> {
                         "MultiInfo message key is not valid UTF-8",
                     )
                 })?;
-                // Key format is "type[size] name", extract just the name part
-                let key_name = key.split(' ').next_back().unwrap_or(key);
+                // Key format is "type name" (e.g. "char[10] sys_name"); split it
+                // into the type and the name, keeping both.
+                let (type_str, key_name) = split_info_key(key);
                 let value = &msg.data[(2 + key_len)..];
 
                 // Still fire the raw per-fragment callback for backward compatibility
                 if let Some(cb) = &mut self.multi_info_message_callback {
                     cb(&MultiInfoMessage {
                         is_continued,
+                        type_str,
                         key: key_name,
                         value,
                     });
                 }
 
-                // Reassembly: buffer fragments until is_continued=false
-                if self.reassembled_multi_info_callback.is_some() {
+                // Reassembly: only buffer fragments when a reassembly callback is
+                // registered, otherwise this is wasted work and unbounded growth
+                // for never-terminated keys. Bind the callback up front.
+                if let Some(cb) = self.reassembled_multi_info_callback.as_mut() {
                     let key_owned = key_name.to_string();
                     let entry = self.multi_info_buffer.entry(key_owned.clone()).or_default();
                     entry.extend_from_slice(value);
 
                     if !is_continued {
-                        // Final fragment, emit the reassembled message
+                        // Final fragment, emit the reassembled message.
                         let assembled_value = self.multi_info_buffer.remove(&key_owned).unwrap();
-                        if let Some(cb) = &mut self.reassembled_multi_info_callback {
-                            cb(&model::ReassembledMultiInfoMessage {
-                                key: key_owned,
-                                value: assembled_value,
-                            });
-                        }
+                        cb(&model::ReassembledMultiInfoMessage {
+                            key: key_owned,
+                            value: assembled_value,
+                        });
                     }
                 }
             }
@@ -688,6 +694,7 @@ impl<'c> LogParser<'c> {
                         "parameter default message key format invalid",
                     ));
                 }
+                // The spec defines only int32 and float parameter types.
                 let parameter_default_message = match parts[0] {
                     "int32_t" => Ok(ParameterDefaultMessage::Int32(
                         parts[1],
@@ -779,6 +786,16 @@ impl MaybeRepeatedType {
             ParseErrorType::Other,
             &format!("invalid type string: {}", written_type),
         ))
+    }
+}
+
+/// Split an info-message key `"type name"` into `(type, name)`. ULog encodes the
+/// key as a typed declaration (e.g. `"char[10] sys_name"`). If there is no space
+/// the whole string is treated as the name with an empty type.
+fn split_info_key(key: &str) -> (&str, &str) {
+    match key.split_once(' ') {
+        Some((type_str, name)) => (type_str, name),
+        None => ("", key),
     }
 }
 

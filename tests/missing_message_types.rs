@@ -61,17 +61,20 @@ fn info_synthetic_multiple_keys_are_surfaced() {
 
     let infos = collect_from_bytes(&builder.build(), "info_multi_keys", |msg| {
         if let Message::InfoMessage(i) = msg {
-            Some((i.key.to_string(), i.value.to_vec()))
+            Some((i.type_str.to_string(), i.key.to_string(), i.value.to_vec()))
         } else {
             None
         }
     });
 
-    let keys: Vec<_> = infos.iter().map(|(k, _)| k.as_str()).collect();
+    let keys: Vec<_> = infos.iter().map(|(_, k, _)| k.as_str()).collect();
     assert_eq!(keys, vec!["sys_name", "ver_hw", "ver_sw_release"]);
-    assert_eq!(infos[0].1, b"PX4");
-    assert_eq!(infos[1].1, b"AUAV_X21");
-    assert_eq!(infos[2].1, 42i32.to_le_bytes());
+    // The type portion of the key is surfaced separately from the name.
+    let types: Vec<_> = infos.iter().map(|(t, _, _)| t.as_str()).collect();
+    assert_eq!(types, vec!["char[3]", "char[8]", "int32_t[4]"]);
+    assert_eq!(infos[0].2, b"PX4");
+    assert_eq!(infos[1].2, b"AUAV_X21");
+    assert_eq!(infos[2].2, 42i32.to_le_bytes());
 }
 
 /// Reference values extracted from pyulog for sample.ulg.
@@ -122,13 +125,16 @@ fn multi_info_synthetic_fragment_is_surfaced() {
 
     let fragments = collect_from_bytes(&builder.build(), "multi_info_fragment", |msg| {
         if let Message::MultiInfoMessage(mi) = msg {
-            Some((mi.is_continued, mi.key.to_string()))
+            Some((mi.is_continued, mi.type_str.to_string(), mi.key.to_string()))
         } else {
             None
         }
     });
 
-    assert_eq!(fragments, vec![(false, "replay".to_string())]);
+    assert_eq!(
+        fragments,
+        vec![(false, "char[4]".to_string(), "replay".to_string())]
+    );
 }
 
 // =============================================================================
