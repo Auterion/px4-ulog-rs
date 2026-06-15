@@ -16,6 +16,7 @@ byteorder = "1"
 
 [dev-dependencies]
 criterion = "0.5"
+clap = { version = "4", features = ["derive"] }
 
 [[bench]]
 name = "parser"

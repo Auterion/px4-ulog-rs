@@ -3,10 +3,10 @@
 // cross-checking against another parser (pair with scripts/ulog_cpp_check
 // and diff the outputs).
 //
-// Input modes:
-//   scan_corpus <dir>              walk <dir> recursively, parse every *.ulg
-//   scan_corpus --list <paths.txt> parse one path per line from the file
-//   scan_corpus --stdin            parse one path per line from stdin
+// Input modes (subcommands):
+//   scan_corpus walk <dir>         walk <dir> recursively, parse every *.ulg
+//   scan_corpus list <paths.txt>   parse one path per line from the file
+//   scan_corpus stdin              parse one path per line from stdin
 //
 // Per-file output (tab-separated, stdout):
 //   OK\t<path>                                  parse returned Ok
@@ -14,6 +14,7 @@
 //
 // A summary with file counts, byte counts and elapsed time goes to stderr.
 
+use clap::{Parser, Subcommand};
 use px4_ulog::stream_parser::file_reader::LogParser;
 use px4_ulog::stream_parser::model::DataMessage;
 use std::fs::File;
@@ -21,6 +22,29 @@ use std::io::{BufRead, BufReader, Read};
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+#[derive(Parser)]
+#[command(about = "Parse every ULog file from a directory walk or a path list")]
+struct Cli {
+    #[command(subcommand)]
+    input: Input,
+}
+
+#[derive(Subcommand)]
+enum Input {
+    /// Walk a directory recursively and parse every *.ulg file.
+    Walk {
+        /// Directory to scan.
+        dir: PathBuf,
+    },
+    /// Parse one path per line read from a file.
+    List {
+        /// File containing one path per line.
+        file: PathBuf,
+    },
+    /// Parse one path per line read from stdin.
+    Stdin,
+}
 
 enum Outcome {
     Ok { bytes: u64 },
@@ -84,53 +108,35 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn usage() -> ! {
-    eprintln!(
-        "usage:\n  \
-         scan_corpus <dir>              walk <dir> for *.ulg\n  \
-         scan_corpus --list <paths.txt> read one path per line from file\n  \
-         scan_corpus --stdin            read one path per line from stdin"
-    );
-    std::process::exit(2);
+fn paths_from_lines<R: BufRead>(reader: R) -> Vec<PathBuf> {
+    reader
+        .lines()
+        .map_while(Result::ok)
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
-fn collect_paths() -> Vec<PathBuf> {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("--list") => {
-            let file = args.next().unwrap_or_else(|| usage());
-            let reader = BufReader::new(File::open(&file).expect("open list file"));
-            reader
-                .lines()
-                .map_while(Result::ok)
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .map(PathBuf::from)
-                .collect()
-        }
-        Some("--stdin") => {
-            let stdin = std::io::stdin();
-            stdin
-                .lock()
-                .lines()
-                .map_while(Result::ok)
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .map(PathBuf::from)
-                .collect()
-        }
-        Some(dir) if !dir.starts_with("--") => {
+fn collect_paths(input: Input) -> Vec<PathBuf> {
+    match input {
+        Input::Walk { dir } => {
             let mut out = Vec::new();
-            walk(Path::new(dir), &mut out);
+            walk(&dir, &mut out);
             out.sort();
             out
         }
-        _ => usage(),
+        Input::List { file } => {
+            let reader = BufReader::new(File::open(&file).expect("open list file"));
+            paths_from_lines(reader)
+        }
+        Input::Stdin => paths_from_lines(std::io::stdin().lock()),
     }
 }
 
 fn main() {
-    let files = collect_paths();
+    let cli = Cli::parse();
+    let files = collect_paths(cli.input);
     eprintln!("scanning {} file(s)...", files.len());
 
     let start = Instant::now();
