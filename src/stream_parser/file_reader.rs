@@ -247,6 +247,13 @@ impl<'c> LogParser<'c> {
         &self.appended_offsets
     }
 
+    /// True once the FlagBits message has been parsed. After this point the
+    /// appended-data offsets are known, so a reader can safely clamp its reads
+    /// to the first appended offset.
+    pub fn header_complete(&self) -> bool {
+        matches!(self.status, ParseStatus::InDefinitions | ParseStatus::InData)
+    }
+
     /// Resets the parser's leftover buffer so it can cleanly parse data from
     /// a new file offset (used when seeking to appended data sections).
     pub fn clear_leftover(&mut self) {
@@ -1157,23 +1164,62 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
     log_parser
         .set_parameter_default_message_callback(&mut wrapped_parameter_default_message_callback);
 
-    let mut total_bytes_read: usize = 0;
     let mut f = std::fs::File::open(file_path)?;
-    const READ_START: usize = 64 * 1024;
-    let mut buf = [0u8; 1024 * 1024];
-    let buf_capacity = buf.len() - READ_START;
+    drive_parser(&mut log_parser, &mut f, &|| stop_reading.get())
+}
 
-    // First pass: read data up to the first appended offset (or the whole file
-    // if no appended data). The FlagBits message is always at the start, so the
-    // appended offsets become available after the first consume_bytes call.
+/// Buffer offset reserved at the front of the read buffer (preserved from the
+/// original implementation; the parser is fed only the bytes actually read).
+const READ_START: usize = 64 * 1024;
+/// Chunk size used while priming the parser until the FlagBits message is read.
+/// Kept at one byte so `consume_bytes` can never parse past FlagBits into the
+/// following data: the moment FlagBits completes, `header_complete()` flips and
+/// priming stops before any data byte is fed. The header is tiny (~60 bytes),
+/// so the per-byte reads are negligible.
+const PRIME_CHUNK: usize = 1;
+
+fn to_io_error(e: UlogParseError) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e))
+}
+
+/// Drive an already-configured `LogParser` over a whole file: the primary
+/// section followed by any appended data sections, returning the total number
+/// of bytes consumed. `stop` is polled between reads so callers can abort early.
+///
+/// The FlagBits message carries the appended-data offsets but is itself part of
+/// the stream, so the offsets are only known after it has been parsed. We first
+/// prime the parser in small increments until that happens, then let the main
+/// loop clamp each read to the first appended offset. Reading a large chunk
+/// before the offsets are known would over-read into the appended region and
+/// mis-parse it as primary data.
+pub(crate) fn drive_parser(
+    parser: &mut LogParser,
+    f: &mut std::fs::File,
+    stop: &dyn Fn() -> bool,
+) -> Result<usize, std::io::Error> {
+    let mut buf = vec![0u8; 1024 * 1024];
+    let buf_capacity = buf.len() - READ_START;
+    let mut total_bytes_read: usize = 0;
     let mut file_position: u64 = 0;
-    while !stop_reading.get() {
-        // Check if we need to limit the read to stop at the first appended offset
-        let first_appended = log_parser
-            .appended_offsets()
-            .iter()
-            .copied()
-            .find(|&o| o != 0);
+
+    // Prime: parse small chunks until FlagBits is read so the appended offsets
+    // are available before the main loop computes its first read limit.
+    while !stop() && !parser.header_complete() {
+        let num_bytes_read = f.read(&mut buf[READ_START..(READ_START + PRIME_CHUNK)])?;
+        if num_bytes_read == 0 {
+            break;
+        }
+        parser
+            .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
+            .map_err(to_io_error)?;
+        total_bytes_read += num_bytes_read;
+        file_position += num_bytes_read as u64;
+    }
+
+    // Primary section: read up to the first appended offset (or the whole file
+    // if there is no appended data).
+    while !stop() {
+        let first_appended = parser.appended_offsets().iter().copied().find(|&o| o != 0);
         let max_read = if let Some(offset) = first_appended {
             if file_position >= offset {
                 break; // We've reached the appended region
@@ -1187,36 +1233,34 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
         if num_bytes_read == 0 {
             break;
         }
-        log_parser
+        parser
             .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
+            .map_err(to_io_error)?;
         total_bytes_read += num_bytes_read;
         file_position += num_bytes_read as u64;
     }
 
-    // Parse appended data sections if present.
-    // The ULog spec allows up to 3 appended data sections for crash log recovery.
-    // Each non-zero offset points to a file position where additional data begins.
-    let appended_offsets = *log_parser.appended_offsets();
-    let non_zero_offsets: Vec<u64> = appended_offsets
+    // Appended data sections, if present. The ULog spec allows up to 3 for
+    // crash log recovery; each non-zero offset points at where a section begins.
+    let non_zero_offsets: Vec<u64> = parser
+        .appended_offsets()
         .iter()
         .copied()
         .filter(|&o| o != 0)
         .collect();
     for (i, &offset) in non_zero_offsets.iter().enumerate() {
-        if stop_reading.get() {
+        if stop() {
             break;
         }
-        // Determine the end boundary: next appended offset or EOF
+        // End boundary: next appended offset or EOF.
         let read_until = non_zero_offsets.get(i + 1).copied();
 
-        // Clear leftover bytes from previous section boundary
-        log_parser.clear_leftover();
-        // Seek to the appended data offset
+        // Clear leftover bytes from the previous section boundary before seeking.
+        parser.clear_leftover();
         f.seek(SeekFrom::Start(offset))?;
         let mut section_position = offset;
 
-        while !stop_reading.get() {
+        while !stop() {
             let max_read = if let Some(end) = read_until {
                 if section_position >= end {
                     break;
@@ -1230,11 +1274,9 @@ pub fn read_file_with_simple_callback<CB: FnMut(&Message) -> SimpleCallbackResul
             if num_bytes_read == 0 {
                 break;
             }
-            log_parser
+            parser
                 .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
-                .map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e))
-                })?;
+                .map_err(to_io_error)?;
             total_bytes_read += num_bytes_read;
             section_position += num_bytes_read as u64;
         }
