@@ -13,3 +13,10 @@ path = "src/main.rs"
 
 [dependencies]
 byteorder = "1"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "parser"
+harness = false
