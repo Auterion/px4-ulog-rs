@@ -247,3 +247,28 @@ fn parameter_default_surfaces_system_and_current_config_flags() {
         ]
     );
 }
+
+/// A ParameterDefault message whose declared key_len runs past the end of the
+/// message must be rejected, not slice out of bounds and panic. Payload layout
+/// is [default_types, key_len, key.., value..]; here key_len claims 200 bytes
+/// of key in a message that only holds a handful, so 2 + key_len exceeds the
+/// data length.
+#[test]
+fn parameter_default_with_key_len_past_end_is_rejected_not_panicking() {
+    let mut builder = ULogBuilder::new();
+    builder.flag_bits();
+    // default_types = 0x01, key_len = 200 (far beyond the 3 bytes that follow).
+    builder.unknown_message(b'Q', &[0x01, 200, b'a', b'b', b'c']);
+
+    let tmp = std::env::temp_dir().join("param_default_bad_key_len.ulg");
+    std::fs::write(&tmp, builder.build()).expect("write temp file");
+    let result = read_file_with_simple_callback(tmp.to_str().unwrap(), &mut |_| {
+        SimpleCallbackResult::KeepReading
+    });
+    let _ = std::fs::remove_file(&tmp);
+
+    assert!(
+        result.is_err(),
+        "malformed parameter default should return Err, got Ok"
+    );
+}

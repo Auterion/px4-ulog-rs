@@ -661,6 +661,12 @@ impl<'c> LogParser<'c> {
                 }
                 let default_types = msg.data[0];
                 let key_len = msg.data[1];
+                if msg.data.len() < 2 + key_len as usize {
+                    return Err(UlogParseError::new(
+                        ParseErrorType::Other,
+                        "parameter default message key_len exceeds message size",
+                    ));
+                }
                 let value_bytes = &msg.data()[(2 + key_len as usize)..];
                 if value_bytes.len() != 4 {
                     return Err(UlogParseError::new(
