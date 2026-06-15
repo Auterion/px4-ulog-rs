@@ -116,28 +116,15 @@ pub struct FlattenedField {
     pub offset: u16, // relative to the beginning of the message ()
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum TimestampFieldType {
-    UInt8,
-    UInt16,
-    UInt32,
-    UInt64,
-}
-
 #[derive(Clone, Debug)]
 pub struct TimestampField {
-    pub field_type: TimestampFieldType,
-    pub offset: u16, // relative to the beginning of the message ()
+    pub offset: u16, // relative to the beginning of the message
 }
 
 impl TimestampField {
     pub fn parse_timestamp(&self, data: &[u8]) -> u64 {
-        match self.field_type {
-            TimestampFieldType::UInt8 => u8::parse(&data[self.offset as usize..]) as u64,
-            TimestampFieldType::UInt16 => u16::parse(&data[self.offset as usize..]) as u64,
-            TimestampFieldType::UInt32 => u32::parse(&data[self.offset as usize..]) as u64,
-            TimestampFieldType::UInt64 => u64::parse(&data[self.offset as usize..]),
-        }
+        // The ULog spec requires the timestamp field to be uint64 microseconds.
+        u64::parse(&data[self.offset as usize..])
     }
 }
 
@@ -209,28 +196,14 @@ impl FlattenedFormat {
             .iter()
             .map(|f| (f.flattened_field_name.to_string(), (*f).clone()))
             .collect();
-        let timestamp_field =
-            name_to_field
-                .get("timestamp")
-                .and_then(|field| match field.field_type {
-                    FlattenedFieldType::UInt8 => Some(TimestampField {
-                        field_type: TimestampFieldType::UInt8,
-                        offset: field.offset,
-                    }),
-                    FlattenedFieldType::UInt16 => Some(TimestampField {
-                        field_type: TimestampFieldType::UInt16,
-                        offset: field.offset,
-                    }),
-                    FlattenedFieldType::UInt32 => Some(TimestampField {
-                        field_type: TimestampFieldType::UInt32,
-                        offset: field.offset,
-                    }),
-                    FlattenedFieldType::UInt64 => Some(TimestampField {
-                        field_type: TimestampFieldType::UInt64,
-                        offset: field.offset,
-                    }),
-                    _ => None,
-                });
+        // Per the ULog spec the timestamp field is uint64 microseconds; a field
+        // named "timestamp" of any other type is not treated as the timestamp.
+        let timestamp_field = name_to_field
+            .get("timestamp")
+            .filter(|field| field.field_type == FlattenedFieldType::UInt64)
+            .map(|field| TimestampField {
+                offset: field.offset,
+            });
         Ok(Self {
             message_name,
             fields,
