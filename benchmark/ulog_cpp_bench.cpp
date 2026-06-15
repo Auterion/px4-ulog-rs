@@ -44,7 +44,9 @@ double parse_once(const std::string& path) {
     std::exit(1);
   }
 
-  constexpr size_t BUF = 64 * 1024;
+  // Match the Rust parser's read buffer size so the two benchmarks do the
+  // same I/O (see drive_parser in src/stream_parser/file_reader.rs).
+  constexpr size_t BUF = 1024 * 1024;
   std::vector<uint8_t> buf(BUF);
 
   const auto t0 = std::chrono::steady_clock::now();
