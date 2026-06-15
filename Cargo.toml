@@ -17,6 +17,7 @@ byteorder = "1"
 [dev-dependencies]
 criterion = "0.5"
 clap = { version = "4", features = ["derive"] }
+insta = { version = "1", features = ["yaml"] }
 
 [[bench]]
 name = "parser"
