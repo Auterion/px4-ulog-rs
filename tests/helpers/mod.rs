@@ -223,8 +223,8 @@ impl ULogBuilder {
     }
 
     /// Get the built bytes.
-    pub fn build(&self) -> Vec<u8> {
-        self.buf.clone()
+    pub fn build(self) -> Vec<u8> {
+        self.buf
     }
 
     /// Get current byte length.

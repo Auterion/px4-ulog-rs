@@ -181,7 +181,9 @@ fn malformed_format_strings_are_rejected() {
         b"topic_x:uint64_ttimestamp", // no space between type and field name
     ];
     for bad in cases {
-        let mut bytes = ULogBuilder::new().flag_bits().build();
+        let mut builder = ULogBuilder::new();
+        builder.flag_bits();
+        let mut bytes = builder.build();
         bytes.extend_from_slice(&(bad.len() as u16).to_le_bytes());
         bytes.push(b'F');
         bytes.extend_from_slice(bad);
