@@ -19,7 +19,10 @@ fn parse_with_timestamp_type(ts_type_str: &str, ts_bytes: &[u8]) -> (bool, Optio
     let mut builder = ULogBuilder::new();
     builder
         .flag_bits()
-        .format("sensor_data", &[(ts_type_str, "timestamp"), ("float", "value")])
+        .format(
+            "sensor_data",
+            &[(ts_type_str, "timestamp"), ("float", "value")],
+        )
         .add_logged(0, 0, "sensor_data");
 
     let mut field_data = Vec::new();

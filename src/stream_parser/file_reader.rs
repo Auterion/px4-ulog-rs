@@ -251,7 +251,10 @@ impl<'c> LogParser<'c> {
     /// appended-data offsets are known, so a reader can safely clamp its reads
     /// to the first appended offset.
     pub fn header_complete(&self) -> bool {
-        matches!(self.status, ParseStatus::InDefinitions | ParseStatus::InData)
+        matches!(
+            self.status,
+            ParseStatus::InDefinitions | ParseStatus::InData
+        )
     }
 
     /// Resets the parser's leftover buffer so it can cleanly parse data from
