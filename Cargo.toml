@@ -18,6 +18,7 @@ byteorder = "1"
 criterion = "0.5"
 clap = { version = "4", features = ["derive"] }
 insta = { version = "1", features = ["yaml"] }
+serde = { version = "1", features = ["derive"] }
 
 [[bench]]
 name = "parser"

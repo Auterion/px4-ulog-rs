@@ -9,40 +9,73 @@ use px4_ulog::full_parser;
 use px4_ulog::stream_parser::file_reader::{
     read_file_with_simple_callback, Message, SimpleCallbackResult,
 };
+use px4_ulog::stream_parser::model::ParameterMessage;
+use serde::Serialize;
+
 fn fixture_path(name: &str) -> String {
     format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name)
 }
 
-/// Map every data topic in a log to its message count. Structural only: topic
-/// names and counts are independent of the runtime GPS offset applied to scrubbed
-/// fixtures, so this is deterministic and safe to snapshot (no GPS values leak in).
-/// A BTreeMap keeps the snapshot output stably ordered.
-fn topic_summary(path: &str) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
+/// A deterministic, snapshottable inventory of a log's contents: data topics with
+/// their message counts, parameter values, and logged-message counts per severity.
+/// BTreeMaps keep the snapshot output stably ordered.
+#[derive(Serialize)]
+struct LogSummary {
+    topics: BTreeMap<String, usize>,
+    parameters: BTreeMap<String, String>,
+    logged_messages_by_level: BTreeMap<u8, usize>,
+}
+
+/// Build a [`LogSummary`] for a fixture. Captures data topic counts, parameters,
+/// and logged-message counts so any drift in the parsed inventory fails the test.
+fn log_summary(path: &str) -> LogSummary {
+    let mut topics = BTreeMap::new();
+    let mut parameters = BTreeMap::new();
+    let mut logged_messages_by_level = BTreeMap::new();
     read_file_with_simple_callback(path, &mut |msg| {
-        if let Message::Data(data) = msg {
-            *counts
-                .entry(data.flattened_format.message_name.clone())
-                .or_insert(0) += 1;
+        match msg {
+            Message::Data(data) => {
+                *topics
+                    .entry(data.flattened_format.message_name.clone())
+                    .or_insert(0) += 1;
+            }
+            Message::ParameterMessage(param) => match param {
+                ParameterMessage::Float(name, value, _) => {
+                    parameters.insert(name.to_string(), value.to_string());
+                }
+                ParameterMessage::Int32(name, value, _) => {
+                    parameters.insert(name.to_string(), value.to_string());
+                }
+            },
+            Message::LoggedMessage(logged) => {
+                *logged_messages_by_level
+                    .entry(logged.log_level)
+                    .or_insert(0) += 1;
+            }
+            _ => {}
         }
         SimpleCallbackResult::KeepReading
     })
     .expect("fixture should parse");
-    counts
+    LogSummary {
+        topics,
+        parameters,
+        logged_messages_by_level,
+    }
 }
 
 // =============================================================================
 // Quadrotor (local position, no GPS), 3.7 MB
 // =============================================================================
 
-// The topic inventory (names + exact per-topic data counts) is snapshotted, so
-// any topic that silently appears, disappears, or shifts in count fails the test.
-// This subsumes the earlier spot-checks for specific topics and the loose count
-// thresholds. Indoor/no-GPS quadrotor: expect vehicle_local_position, no
-// vehicle_global_position.
+// The full inventory (topic names + counts, parameters, logged-message counts) is
+// snapshotted, so any topic, parameter, or log message that silently appears,
+// disappears, or shifts in count fails the test. This subsumes the earlier
+// spot-checks for specific topics and the loose count thresholds. Indoor/no-GPS
+// quadrotor: expect vehicle_local_position, no vehicle_global_position.
 #[test]
 fn test_quadrotor_local_topics() {
-    insta::assert_yaml_snapshot!(topic_summary(&fixture_path("quadrotor_local.ulg")));
+    insta::assert_yaml_snapshot!(log_summary(&fixture_path("quadrotor_local.ulg")));
 }
 
 // =============================================================================
@@ -53,17 +86,17 @@ fn test_quadrotor_local_topics() {
 // inventory; the exact counts replace the previous ">10K total" threshold.
 #[test]
 fn test_fixed_wing_gps_topics() {
-    insta::assert_yaml_snapshot!(topic_summary(&fixture_path("fixed_wing_gps.ulg")));
+    insta::assert_yaml_snapshot!(log_summary(&fixture_path("fixed_wing_gps.ulg")));
 }
 
 // =============================================================================
 // VTOL, 16 MB
 // =============================================================================
 
-// VTOL: snapshot the full topic inventory and counts.
+// VTOL: snapshot the full inventory (topics, parameters, logged messages).
 #[test]
 fn test_vtol_demo_topics() {
-    insta::assert_yaml_snapshot!(topic_summary(&fixture_path("vtol_demo.ulg")));
+    insta::assert_yaml_snapshot!(log_summary(&fixture_path("vtol_demo.ulg")));
 }
 
 // =============================================================================
