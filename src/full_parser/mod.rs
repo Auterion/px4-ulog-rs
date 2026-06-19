@@ -5,7 +5,6 @@ pub use crate::stream_parser::model::{FlattenedFieldType, MultiId};
 use crate::stream_parser::LittleEndianParser;
 use crate::stream_parser::LogParser;
 use std::collections::HashMap;
-use std::io::Read;
 
 pub struct ParsedData {
     pub messages: HashMap<String, HashMap<MultiId, HashMap<String, SomeVec>>>,
@@ -21,17 +20,9 @@ pub fn read_file(file_path: &str) -> Result<ParsedData, std::io::Error> {
     let mut parser = LogParser::default();
     parser.set_data_message_callback(&mut callback);
 
-    const READ_START: usize = 64 * 1024;
-    let mut buf = [0u8; 1024 * 1024];
-    loop {
-        let num_bytes_read = f.read(&mut buf[READ_START..])?;
-        if num_bytes_read == 0 {
-            break;
-        }
-        parser
-            .consume_bytes(&buf[READ_START..(READ_START + num_bytes_read)])
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("err: {:?}", e)))?;
-    }
+    // Drive the whole file (primary section + any appended data sections).
+    crate::stream_parser::file_reader::drive_parser(&mut parser, &mut f, &|| false)?;
+
     let mut data_format = parser.get_final_data_format();
 
     let mut messages = HashMap::<String, HashMap<MultiId, HashMap<String, SomeVec>>>::new();
@@ -175,9 +166,8 @@ impl TotalArrayReader {
             }
         }
 
-        for i in 0..msg.flattened_format.fields.len() {
-            let el = &msg.flattened_format.fields[i];
-            let value = deserialize_field(&el, msg.data);
+        for (i, el) in msg.flattened_format.fields.iter().enumerate() {
+            let value = deserialize_field(el, msg.data);
             field_values[i].push(&value);
         }
     }

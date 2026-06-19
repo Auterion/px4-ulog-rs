@@ -4,7 +4,7 @@ version = "0.1.1"
 authors = ["Ilari Mäkimattila <ilari@auterion.com>"]
 description = "PX4 ULog parsing library"
 license = "MIT"
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "px4-ulog"
@@ -13,3 +13,13 @@ path = "src/main.rs"
 
 [dependencies]
 byteorder = "1"
+
+[dev-dependencies]
+criterion = "0.5"
+clap = { version = "4", features = ["derive"] }
+insta = { version = "1", features = ["yaml"] }
+serde = { version = "1", features = ["derive"] }
+
+[[bench]]
+name = "parser"
+harness = false
