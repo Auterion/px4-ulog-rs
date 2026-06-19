@@ -1,16 +1,15 @@
-PX4 Ulog file parser for Rust
-=============================
-
-NOTE: Before 1.0 we will not follow semantic versioning.
+# ULog file parser for Rust
 
 A ULog file parser for Rust written with a small memory footprint.
 Reading the file is implemented in a streaming manner, where possible.
 
+## Features
+All ULog file format features are supported, except for:
+- Resuming from file corruptions by searching for the synchronization message
 
-Contributing
-------------
+Writing ULog files is not supported.
 
-### Design goals
+## Design goals
 
 The API should be streaming, meaning:
 
@@ -23,3 +22,9 @@ Other goals are:
   * Don't panic
   * Don't use unsafe
 
+## Development
+
+For development, install the pre-commit scripts:
+```shell
+pre-commit install
+```
